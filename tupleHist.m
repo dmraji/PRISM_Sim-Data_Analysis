@@ -56,6 +56,13 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj] = t
     ylabel('Counts');
     grid on;
     
+    % Adding fabricated noise to the energy from simulation
+    function CZTNoise()
+        % for an average ionization energy of 5.0 eV for CZT
+        ionEn = .005;
+        
+    end
+
     % Grabbing the ROI from the "No-Noise" energy spectrum and ...
     % performing a Gaussian fit
     % NOTE: will work much more effectively with experimental data ...
