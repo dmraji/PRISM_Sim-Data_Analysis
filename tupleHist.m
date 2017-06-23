@@ -46,6 +46,7 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj] = t
     grid on;
     fprintf('Press any key to continue.\n');
     pause
+    tabbedEn = tabulate(round(noNoiseEn));
     ROI;
     fprintf('Press any key to continue.\n');
     pause
@@ -60,7 +61,6 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj] = t
     % NOTE: will work much more effectively with experimental data ...
     % function should be exportable
     function ROI()
-        tabbedEn = tabulate(round(noNoiseEn));
         [peakCts, peakInd] = max(tabbedEn(:, 2));
         peakEn = tabbedEn(peakInd, 1);
         n = 1;
@@ -83,6 +83,18 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj] = t
         end
         vecROI = nonzeros(vecROI);
         histfit(vecROI, 100)
+        resp = input('Is there another peak? (y / n)\n', 's');
+        if strcmp(resp, 'y')
+            try
+                j1 = 1;
+                while j1 <= 9
+                    tabbedEn(peakInd + j1 - 5, 2) = 0;
+                    j1 = j1 + 1;
+                end
+            end
+        elseif strcmp(resp, 'n')
+            fprintf('Moving on ...\n');
+        end
     end
     
     % Coincidence considerations

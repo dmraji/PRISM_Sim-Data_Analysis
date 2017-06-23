@@ -1,4 +1,6 @@
 function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj] = tupleHist()
+    
+    % Grabbing data from G4 PRISM_Sim output file, transforming into matrix
     pr = 'Enter file name.';
     % fn = input(pr, 's');
     fn = 'output_662keV_rand_cone_SA1D_HP912.txt';
@@ -22,6 +24,7 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj] = t
     data = [data{:}];
     dataNC = cellfun(@str2double, data);
     
+    % Grabbing individual vectors from data matrix
     evNum = dataNC(2:end, 1);
     hitNum = dataNC(2:end, 2);
     trackID = dataNC(2:end, 3);
@@ -32,6 +35,9 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj] = t
     HP = dataNC(2:end, 8);
     time = dataNC(2:end, 9);
     
+    % Adjustments for "noise" from sim - largely result of ...
+    % unknown scatterings in G4
+    % Histograms - more can be implemented for more of the data available
     noNoiseEn = nonzeros(en);
     histogram(noNoiseEn, 100)
     title('Energy, Binned');
@@ -53,8 +59,8 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj] = t
     % performing a Gaussian fit
     % NOTE: will work much more effectively with experimental data ...
     % function should be exportable
+    tabbedEn = tabulate(round(noNoiseEn));
     function ROI()
-        tabbedEn = tabulate(round(noNoiseEn));
         [peakCts, peakInd] = max(tabbedEn(:, 2));
         peakEn = tabbedEn(peakInd, 1);
         n = 1;
@@ -77,6 +83,10 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj] = t
         end
         vecROI = nonzeros(vecROI);
         histfit(vecROI, 100)
+        resp = input('Is there another peak? (y / n)', 's');
+        if resp.equals('y')
+            tabbedEn(peakEn
+        end
     end
     
     % Coincidence considerations
@@ -108,7 +118,7 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj] = t
     coinEn = coinTr .* en;
     coinEn = coinEn(find(coinTr));
     
-    % Timing adjustment - this code section   
+    % Timing adjustment for lack of true "global" time in simulation
     function timeAdjNonUq(ind, timePl)
         timeAdj(ind) = timeAdj(ind) + timePl;
     end
@@ -125,7 +135,8 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj] = t
         end
     end
     
-    % identifying "false" coincidences
+    % identifying "false" coincidences based on time (including ...
+    % adjustments)
     k = 1;
     coinAll = evNum;
     while k < length(timeAdj)
@@ -133,7 +144,6 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj] = t
             coinAll(k) = 1;
             coinAll(k+1) = 1;
             k = k + 2;
-            
         elseif k > 1
             if ((timeAdj(k) + 0.2) >= timeAdj(k-1)) && ((timeAdj(k) - 0.2) <= timeAdj(k-1)) && (detID(k) == detID(k-1))
                 coinAll(k) = 1;
