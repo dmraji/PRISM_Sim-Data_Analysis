@@ -1,9 +1,9 @@
 function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj] = tupleHist()
     
     % Grabbing data from G4 PRISM_Sim output file, transforming into matrix
-    pr = 'Enter file name.';
+    % pr = 'Enter file name.';
     % fn = input(pr, 's');
-    fn = 'output_662keV_rand_cone_SA1D_HP912.txt';
+    fn = 'output_662keV_rand_cone_SA1D_HP912_abridged.txt';
     fID = fopen(fn, 'r');
     line = fgetl(fID);
     fclose(fID);
@@ -39,9 +39,9 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj] = t
     % unknown scatterings in G4
     % Histograms - more can be implemented for more of the data available
     noNoiseEn = nonzeros(en);
-    histogram(noNoiseEn, 100)
+    histogram(noNoiseEn, 256)
     title('Energy, Binned');
-    xlabel('Energy, KeV');
+    xlabel('Energy, keV');
     ylabel('Counts');
     grid on;
     fprintf('Press any key to continue.\n');
@@ -56,13 +56,6 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj] = t
     ylabel('Counts');
     grid on;
     
-    % Adding fabricated noise to the energy from simulation
-    function CZTNoise()
-        % for an average ionization energy of 5.0 eV for CZT
-        ionEn = .005;
-        
-    end
-
     % Grabbing the ROI from the "No-Noise" energy spectrum and ...
     % performing a Gaussian fit
     % NOTE: will work much more effectively with experimental data ...
@@ -75,21 +68,36 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj] = t
             vecROI(n) = peakEn;
             n = n + 1;
         end
-        try
-            j = 1;
-            while j <= 9
-                peakSurrEnHold = tabbedEn(peakInd + j - 5, 1);
-                peakSurrCtsHold = tabbedEn(peakInd + j - 5, 2);
-                m = 1;
-                while m <= peakSurrCtsHold
-                    vecROI(end + m) = peakSurrEnHold;
-                    m = m + 1;
+        j = 1;
+        peakBreadth = 20;
+        while j <= (peakBreadth * 2) + 1
+            try
+                if tabbedEn(peakInd + j - peakBreadth, 2) ~= tabbedEn(peakEn, 2) + j - peakBreadth
+                    tabbedEn = [tabbedEn(1:(peakInd + j - peakBreadth + 1), :); [0, 0, 0]; tabbedEn((peakInd + j - peakBreadth):end, :)];
+                    tabbedEn(peakInd + j - peakBreadth, 1) = peakEn + j - peakBreadth;
+                    tabbedEn(peakInd + j - peakBreadth, 2) = 0;
+                    tabbedEn(peakInd + j - peakBreadth, 3) = 0;
                 end
-                j = j + 1;
+            catch
+                tabbedEn = [tabbedEn(1:(peakInd + j - peakBreadth + 1), :); [0, 0, 0]; tabbedEn((peakInd + j - peakBreadth):end, :)];
+                tabbedEn(peakInd + j - peakBreadth, 1) = peakEn + j - peakBreadth;
+                tabbedEn(peakInd + j - peakBreadth, 2) = 0;
+                tabbedEn(peakInd + j - peakBreadth, 3) = 0;
             end
-        end
+            if j ~= peakBreadth
+                CZTNoise(peakEn, peakInd, peakCts, peakBreadth, j);
+            end
+            peakSurrEnHold = tabbedEn(peakInd + j - peakBreadth, 1);
+            peakSurrCtsHold = tabbedEn(peakInd + j - peakBreadth, 2);
+            m = 1;
+            while m <= peakSurrCtsHold
+                vecROI(end + m) = peakSurrEnHold;
+                m = m + 1;
+            end
+            j = j + 1;
+        end 
         vecROI = nonzeros(vecROI);
-        histfit(vecROI, 100)
+        histfit(vecROI, length(unique(vecROI)))
         resp = input('Is there another peak? (y / n)\n', 's');
         if strcmp(resp, 'y')
             try
@@ -99,8 +107,34 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj] = t
                     j1 = j1 + 1;
                 end
             end
+            ROI;
         elseif strcmp(resp, 'n')
             fprintf('Moving on ...\n');
+        end
+    end
+
+    % Adding fabricated noise to the energy from simulation
+    function CZTNoise(peakEn, peakInd, peakCts, peakBreadth, j)
+        % assuming a general resolution of 2.5% at half-max
+        resHM = 0.025;
+        simEn = peakEn;
+        fwhm = resHM * simEn;
+        % peak should be this wide at half max
+        hm = round(peakCts / 2);
+        
+        % assuming a general resolution of 5.8% at tenth-max
+        resTM = 0.058;
+        fwtm = resTM * simEn;
+        % peak should be this wide at tenth max
+        tm = round(peakCts / 10)
+        
+        relPeakPos = 1 - (abs(j - peakBreadth) / (peakBreadth + 1));
+        if relPeakPos > 0.5
+            corrFactor = (2 * (relPeakPos - 0.5))^2;
+            tabbedEn(peakInd + j - peakBreadth, 2) = (peakCts * corrFactor);
+        else
+            corrFactor = sqrt(2 * (relPeakPos - 0.5));
+            tabbedEn(peakInd + j - peakBreadth, 2) = hm * corrFactor;
         end
     end
     
