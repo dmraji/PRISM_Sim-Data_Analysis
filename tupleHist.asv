@@ -46,7 +46,7 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj] = t
 %     grid on;
 %     fprintf('Press any key to continue.\n');
 %     pause
-    tabbedEn = tabulate(round(noNoiseEn));
+%     tabbedEn = tabulate(round(noNoiseEn));
     ROI;
     fprintf('Press any key to continue.\n');
     pause
@@ -113,7 +113,7 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj] = t
             x = x + 1;
         end
         histogram(smEn, 256)
-        title('Energy spectrum with smeared peak, binned');
+        title('Energy, Binned');
         xlabel('Energy, keV');
         ylabel('Counts');
         grid on;
