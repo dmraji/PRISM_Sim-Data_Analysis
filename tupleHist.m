@@ -1,6 +1,7 @@
 function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj, time] = tupleHist()
     
-    % constants for decay
+    % Constants for decay (Cs-137)
+    % Assuming source strength of 0.22 microCi
     lam = 0.693 / (30 * 3.154 * (10^7));
     N = (0.22 * 3.7*(10^4)) / lam;
     act = lam * N;
@@ -41,8 +42,7 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj, tim
     time = dataNC(2:end, 9);
     
     % Adjustments for "noise" from sim - largely result of ...
-    % unknown scatterings in G4
-    % Histograms - more can be implemented for more of the data available
+    % transport "scatterings" in G4
     noNoiseEn = nonzeros(en);
 %     histogram(noNoiseEn, 256)
 %     title('Energy, Binned');
@@ -148,6 +148,8 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj, tim
     timeAdj = time;
     timeSaver = 0;
     
+    % Considering events that miss the detector geometry, adjusting ...
+    % timing accordingly
     while ii <= evNum(end) && i <= length(evNum)
         if ~any(i==evNum)
             while ~any(ii==evNum)
@@ -190,11 +192,6 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj, tim
         end
         ii = ii + 1;
     end
-    
-%     if coinTr(end) ~= 1
-%         coinTr(end) = 0;
-%         timeSaver = timeAdjUq(i, timeSaver);
-%     end
     
     coinEn = coinTr .* en;
     coinEn = coinEn(find(coinTr));
