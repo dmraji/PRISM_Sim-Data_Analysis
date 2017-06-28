@@ -1,9 +1,14 @@
-function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj] = tupleHist()
+function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj, time] = tupleHist()
     
+    % constants for decay
+    lam = 0.693 / (30 * 3.154 * (10^7));
+    N = (0.22 * 3.7*(10^4)) / lam;
+    act = lam * N;
+
     % Grabbing data from G4 PRISM_Sim output file, transforming into matrix
     % pr = 'Enter file name.';
     % fn = input(pr, 's');
-    fn = 'output_662keV_rand_cone_SA1D_HP912.txt';
+    fn = 'output_662keV_rand_cone_SA1D_HP912_abridged.txt';
     fID = fopen(fn, 'r');
     line = fgetl(fID);
     fclose(fID);
@@ -112,6 +117,9 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj] = t
             end
             x = x + 1;
         end
+        
+        smEn = background(smEn);
+        
         histogram(smEn, 256)
         title('Energy spectrum with smeared peak, binned');
         xlabel('Energy, keV');
@@ -120,53 +128,99 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj] = t
         fprintf('Press any key to continue.\n');
         pause
     end
+   
+    % Developing the background to add into the spectrum
+    function [smEn] = background(smEn)
+        % Based on DoseNet data, LBL background is about ...
+        % 0.09 microSv/hr (changes hourly, is approximate average)
+        bg = 0.09;
+        % Using an averaged dose factor for inhalation and ingestion ...
+        % for Cs-137 (units: microSv/kBq)
+        % (data from Annexe du Rapport CNE 2003)
+        doseFactor = 11.35;
+        
+    end
     
     % Coincidence considerations
     i = 1;
+    ii = 1;
     coinTr = evNum;
     timeAdj = time;
-    while i < length(evNum)
-        if (evNum(i) == evNum(i+1)) && (detID(i) == detID(i+1))
-            coinTr(i) = 1;
-            coinTr(i+1) = 1;
-            timePl = timeAdjUq(i);
-            timeAdjNonUq(i+1, timePl);
-            i = i + 2;
-        elseif (evNum(i) == evNum(i-1)) && (detID(i) == detID(i-1))
-            coinTr(i) = 1;
-            timeAdjNonUq(i, timePl);
-            i = i + 1;
-        else
-            coinTr(i) = 0;
-            timeAdjUq(i);
-            i = i + 1;
+    timeSaver = 0;
+    
+    while ii <= evNum(end) && i <= length(evNum)
+        if ~any(i==evNum)
+            while ~any(ii==evNum)
+                 timeSaver = timeAdjGhost(timeSaver);
+                 ii = ii + 1;
+            end
         end
+        if i == 1
+            coinTr(i) = 0;
+            timeSaver = timeAdjUq(i, timeSaver);
+            i = i + 1;
+            while evNum(i-1) == evNum(i)
+                tTracker = time(i) - time(i-1);
+                coinTr(i) = 1;
+                coinTr(i-1) = 1;
+                timeAdj(i) = timeAdj(i-1) + tTracker;
+                i = i + 1;
+            end
+        else
+            tTracker = time(i) - time(i-1);
+            if (evNum(i) == evNum(i-1)) && (detID(i) == detID(i-1))
+                coinTr(i) = 1;
+                coinTr(i-1) = 1;
+                timeAdj(i) = timeAdj(i-1) + tTracker;
+                i = i + 1;
+            else
+                coinTr(i) = 0;
+                timeSaver = timeAdjUq(i, timeSaver);
+                i = i + 1;
+                try
+                    while evNum(i-1) == evNum(i)
+                        tTracker = time(i) - time(i-1);
+                        coinTr(i) = 1;
+                        coinTr(i-1) = 1;
+                        timeAdj(i) = timeAdj(i-1) + tTracker;
+                        i = i + 1;
+                    end
+                end
+            end
+        end
+        ii = ii + 1;
     end
-    if coinTr(end) ~= 1
-        coinTr(end) = 0;
-        timeAdjUq(i)
-    end
+    
+%     if coinTr(end) ~= 1
+%         coinTr(end) = 0;
+%         timeSaver = timeAdjUq(i, timeSaver);
+%     end
     
     coinEn = coinTr .* en;
     coinEn = coinEn(find(coinTr));
     
     % Timing adjustment for lack of true "global" time in simulation
-    function timeAdjNonUq(ind, timePl)
+    function [timeSaver] = timeAdjUq(ind, timeSaver)
+        timePl = -1 * log(rand) / (act);
+        if timeSaver == 0
+            timeSaver = timePl;
+        else
+            timePl = timePl + timeSaver;
+            timeSaver = timePl;
+        end
         timeAdj(ind) = timeAdj(ind) + timePl;
     end
-    
-    % consider that 3220 gammas are emitted by one gram of Cs-137 in 1 ns
-    function [timePl] = timeAdjUq(ind)
-        if evNum(ind) < 3220
-            timePl = rand;
-            timeAdj(ind) = timeAdj(ind) + timePl;
+
+    function [timeSaver] = timeAdjGhost(timeSaver)
+        timePl = -1 * log(rand) / (act);
+        if timeSaver == 0
+            timeSaver = timePl;
         else
-            timeAdd = floor(evNum(ind) / 3220);
-            timePl = rand + timeAdd;
-            timeAdj(ind) = timeAdj(ind) + timePl;
+            timePl = timePl + timeSaver;
+            timeSaver = timePl;
         end
     end
-    
+
     % identifying "false" coincidences based on time (including ...
     % adjustments)
     k = 1;
@@ -196,9 +250,9 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj] = t
     coinAllEn = coinAll .* en;
     coinAllEn = coinAllEn(find(coinAll));
     
-%     histogram(timeAdj, 100)
-%     title('Time, Binned');
-%     xlabel('Time, ns');
-%     ylabel('Counts');
-%     grid on;
+    histogram(timeAdj, 100)
+    title('Time, Binned');
+    xlabel('Time, ns');
+    ylabel('Counts');
+    grid on;
 end
