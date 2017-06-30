@@ -9,7 +9,7 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj, tim
     % Grabbing data from G4 PRISM_Sim output file, transforming into matrix
     % pr = 'Enter file name.';
     % fn = input(pr, 's');
-    fn = 'output_662keV_rand_cone_SA1D_HP912_abridged.txt';
+    fn = 'output_662keV_rand_cone_SA1D_HP912.txt';
     fID = fopen(fn, 'r');
     line = fgetl(fID);
     fclose(fID);
@@ -67,21 +67,136 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj, tim
         [peakCts, peakInd] = max(tabbedEn(:, 2));
         peakEn = tabbedEn(peakInd, 1);
         n = 1;
+        
+        % Assuming a measurement of 10 keV-FWHM for electronic noise
+        elecNoiseFWHM = 10;
+        elecNoiseSTDDEV = elecNoiseFWHM / 2.355;
+        
+        % For an ionization energy in CZT of 5 eV
+        qCarrGenN = peakEn / 0.005;
+        % For an average pulse height of 5.7 V ...
+        % source: Hess et. all, "Analysis of the pulse shapes obtained ...
+        % from single crystal CdZnTe radiation detectors", 1994
+        propCons = 5.7 / qCarrGenN;
+        statNoiseSTDDEV = propCons * sqrt(qCarrGenN);
+        
+        % Adding noise stddevs in quadrature
+        noiseDev = sqrt((elecNoiseSTDDEV ^ 2) + (statNoiseSTDDEV ^ 2));
+        noiseFWHM = 2.355 * noiseDev;
+        
         while n <= peakCts
             vecROI(n) = peakEn;
             n = n + 1;
         end
         nFilter = [];
-        while length(nFilter) ~= length(vecROI)
-            filterFiller = randn / 128; 
-            % tightening spread of randn takes resolution at FWHM to  ...
-            % approximately 2-percent (13.24 keV is exactly 2%)
-            
-            if filterFiller
-                nFilter = [nFilter, filterFiller + 1];
+        tightness = 128;
+        
+        [nFilter, smVecROI] = tightener(nFilter, tightness);
+        
+%         function [nFilter, smVecROI] = primeTightness(nFilter, howTight)
+%             nFilter = [];
+%             while length(nFilter) ~= length(vecROI)
+%                 
+%                 filterFiller = randn / howTight; 
+%                 % tightening spread of randn takes resolution at FWHM to  ...
+%                 % approximately 2-percent (13.24 keV is exactly 2%)
+% 
+%                 if filterFiller
+%                     nFilter = [nFilter, filterFiller + 1];
+%                 end
+%             end
+%             smVecROI = nFilter .* vecROI;
+%         end
+%         
+%         function [newFilter, smVecROI] = tightener(nFilter, howTight, tightnessP)
+% 
+%             % tightening or loosening the spread that was defined ...
+%             % previously
+%             newFilter = nFilter - 1;
+%             newFilter = newFilter * tightnessP;
+%             newFilter = newFilter / howTight;
+%             newFilter = newFilter + 1;
+% 
+%             smVecROI = newFilter .* vecROI;
+%         end
+        
+        function [nFilter, smVecROI] = tightener(nFilter, howTight, tightnessP)
+            nFilter = [];
+            while length(nFilter) ~= length(vecROI)
+                
+                filterFiller = randn / howTight; 
+                % tightening spread of randn takes resolution at FWHM to  ...
+                % approximately 2-percent (13.24 keV is exactly 2%)
+
+                if filterFiller
+                    nFilter = [nFilter, filterFiller + 1];
+                end
             end
+            smVecROI = nFilter .* vecROI;
         end
-        smVecROI = nFilter .* vecROI;
+        
+        [binInds, binEdges] = discretize(smVecROI, round(length(unique(smVecROI)) / 8));
+        tabbedBinInds = tabulate(binInds);
+        p = 1;
+        halfDiff = 1000;
+        diffr = 0;
+        fwCur = 1000;
+        [rows, cols] = size(tabbedBinInds);
+        fact = 1.2;
+        upCount = 0;
+        
+        % Tracking down the most accurate bins for the half-max
+        while round(noiseFWHM, 1) ~= round(fwCur, 1)
+            
+            [binInds, binEdges] = discretize(smVecROI, round(length(unique(smVecROI)) / 16));
+            tabbedBinInds = tabulate(binInds);
+            p = 1;
+            halfDiff = 1000000;
+            diffr = 0;
+            fwCur = 1000000;
+            [rows, cols] = size(tabbedBinInds);
+            hm = max(tabbedBinInds(:, 2)) / 2;
+            
+            while p < round(rows / 2)
+                diffr = abs(hm - tabbedBinInds(p, 2));
+                if diffr < halfDiff
+                    halfDiff = diffr;
+                    fwIndLeft = (binEdges(p) + binEdges(p + 1)) / 2;
+                end
+                p = p + 1;
+            end
+
+            halfDiff = 1000000;
+            while p < rows
+                diffr = abs(hm - tabbedBinInds(p, 2));
+                if diffr < halfDiff
+                    halfDiff = diffr;
+                    fwIndRight = (binEdges(p) + binEdges(p + 1)) / 2;
+                end
+                p = p + 1;
+            end
+
+            % Checking whether the current FWHM is smaller or larger ...
+            % than that dictated by the noise
+            fwCur = fwIndRight - fwIndLeft;
+            
+            if fwCur > noiseFWHM
+                tightnessPrior = tightness;
+                tightness = tightness * fact;
+                upCount = upCount + 1;
+                if rem(upCount, 5) == 0
+                    fact = sqrt(fact);
+                end
+            elseif fwCur < noiseFWHM
+                tightnessPrior = tightness;
+                tightness = tightness / fact;
+            end
+            
+            [nFilter, smVecROI] = tightener(nFilter, tightness, tightnessPrior);
+        end
+        
+        
+        
         histfit(smVecROI, round(length(unique(smVecROI)) / 16))
         title('Fitted peak with randomly-selected normal smearing');
         xlabel('Energy, keV');
@@ -223,12 +338,12 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj, tim
     k = 1;
     coinAll = evNum;
     while k < length(timeAdj)
-        if ((timeAdj(k) + 0.2) >= timeAdj(k+1)) && ((timeAdj(k) - 0.2) <= timeAdj(k+1)) && (detID(k) == detID(k+1))
+        if ((timeAdj(k) + 0.01) >= timeAdj(k+1)) && ((timeAdj(k) - 0.01) <= timeAdj(k+1)) && (detID(k) == detID(k+1))
             coinAll(k) = 1;
             coinAll(k+1) = 1;
             k = k + 2;
         elseif k > 1
-            if ((timeAdj(k) + 0.2) >= timeAdj(k-1)) && ((timeAdj(k) - 0.2) <= timeAdj(k-1)) && (detID(k) == detID(k-1))
+            if ((timeAdj(k) + 0.01) >= timeAdj(k-1)) && ((timeAdj(k) - 0.01) <= timeAdj(k-1)) && (detID(k) == detID(k-1))
                 coinAll(k) = 1;
                 k = k + 1;
             else
