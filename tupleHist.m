@@ -93,34 +93,9 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj, tim
         
         [nFilter, smVecROI] = tightener(nFilter, tightness);
         
-%         function [nFilter, smVecROI] = primeTightness(nFilter, howTight)
-%             nFilter = [];
-%             while length(nFilter) ~= length(vecROI)
-%                 
-%                 filterFiller = randn / howTight; 
-%                 % tightening spread of randn takes resolution at FWHM to  ...
-%                 % approximately 2-percent (13.24 keV is exactly 2%)
-% 
-%                 if filterFiller
-%                     nFilter = [nFilter, filterFiller + 1];
-%                 end
-%             end
-%             smVecROI = nFilter .* vecROI;
-%         end
-%         
-%         function [newFilter, smVecROI] = tightener(nFilter, howTight, tightnessP)
-% 
-%             % tightening or loosening the spread that was defined ...
-%             % previously
-%             newFilter = nFilter - 1;
-%             newFilter = newFilter * tightnessP;
-%             newFilter = newFilter / howTight;
-%             newFilter = newFilter + 1;
-% 
-%             smVecROI = newFilter .* vecROI;
-%         end
-        
-        function [nFilter, smVecROI] = tightener(nFilter, howTight, tightnessP)
+        % Adjusting the fwhm of the spectrum to match that of the ...
+        % target (the noise fwhm)
+        function [nFilter, smVecROI] = tightener(nFilter, howTight)
             nFilter = [];
             while length(nFilter) ~= length(vecROI)
                 
@@ -144,6 +119,7 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj, tim
         [rows, cols] = size(tabbedBinInds);
         fact = 1.2;
         upCount = 0;
+        tic;
         
         % Tracking down the most accurate bins for the half-max
         while round(noiseFWHM, 1) ~= round(fwCur, 1)
@@ -157,6 +133,8 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj, tim
             [rows, cols] = size(tabbedBinInds);
             hm = max(tabbedBinInds(:, 2)) / 2;
             
+            % two while loops to grab energies of the left and right ...
+            % edges of the fwhm
             while p < round(rows / 2)
                 diffr = abs(hm - tabbedBinInds(p, 2));
                 if diffr < halfDiff
@@ -181,21 +159,23 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj, tim
             fwCur = fwIndRight - fwIndLeft;
             
             if fwCur > noiseFWHM
-                tightnessPrior = tightness;
                 tightness = tightness * fact;
                 upCount = upCount + 1;
                 if rem(upCount, 5) == 0
                     fact = sqrt(fact);
                 end
             elseif fwCur < noiseFWHM
-                tightnessPrior = tightness;
                 tightness = tightness / fact;
             end
             
-            [nFilter, smVecROI] = tightener(nFilter, tightness, tightnessPrior);
+            % Ensuring the recursion doesn't get stuck
+            elT = toc;
+            if elT > 25
+                fact = 1.2;
+                tic;
+            end
+            [nFilter, smVecROI] = tightener(nFilter, tightness);
         end
-        
-        
         
         histfit(smVecROI, round(length(unique(smVecROI)) / 16))
         title('Fitted peak with randomly-selected normal smearing');

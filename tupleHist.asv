@@ -75,7 +75,8 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj, tim
         % For an ionization energy in CZT of 5 eV
         qCarrGenN = peakEn / 0.005;
         % For an average pulse height of 5.7 V ...
-        % source: Hess et. all, "Analysis of the Pulse Shpae
+        % source: Hess et. all, "Analysis of the pulse shapes obtained ...
+        % from single crystal CdZnTe radiation detectors", 1994
         propCons = 5.7 / qCarrGenN;
         statNoiseSTDDEV = propCons * sqrt(qCarrGenN);
         
@@ -90,9 +91,11 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj, tim
         nFilter = [];
         tightness = 128;
         
-        [nFilter, smVecROI] = primeTightness(nFilter, tightness);
+        [nFilter, smVecROI] = tightener(nFilter, tightness);
         
-        function [nFilter, smVecROI] = primeTightness(nFilter, howTight)
+        % Adjusting the fwhm of the spectrum to match that of the ...
+        % target (the noise fwhm)
+        function [nFilter, smVecROI] = tightener(nFilter, howTight, tightnessP)
             nFilter = [];
             while length(nFilter) ~= length(vecROI)
                 
@@ -107,39 +110,28 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj, tim
             smVecROI = nFilter .* vecROI;
         end
         
-        function [newFilter, smVecROI] = tightener(nFilter, howTight, tightnessP)
-
-            % tightening or loosening the spread that was defined ...
-            % previously
-            newFilter = nFilter - 1;
-            newFilter = newFilter * tightnessP;
-            newFilter = newFilter / howTight;
-            newFilter = newFilter + 1;
-
-            smVecROI = newFilter .* vecROI;
-        end   
-        
         [binInds, binEdges] = discretize(smVecROI, round(length(unique(smVecROI)) / 8));
         tabbedBinInds = tabulate(binInds);
-        hm = peakCts / 2;
         p = 1;
         halfDiff = 1000;
         diffr = 0;
         fwCur = 1000;
         [rows, cols] = size(tabbedBinInds);
-        fact = 2;
+        fact = 1.2;
+        upCount = 0;
         
         % Tracking down the most accurate bins for the half-max
         while round(noiseFWHM, 1) ~= round(fwCur, 1)
             
-            [binInds, binEdges] = discretize(smVecROI, round(length(unique(smVecROI)) / 4));
+            [binInds, binEdges] = discretize(smVecROI, round(length(unique(smVecROI)) / 16));
             tabbedBinInds = tabulate(binInds);
-            hm = peakCts / 2;
             p = 1;
             halfDiff = 1000000;
             diffr = 0;
             fwCur = 1000000;
             [rows, cols] = size(tabbedBinInds);
+            hm = max(tabbedBinInds(:, 2)) / 2;
+            
             
             while p < round(rows / 2)
                 diffr = abs(hm - tabbedBinInds(p, 2));
@@ -166,17 +158,25 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj, tim
             
             if fwCur > noiseFWHM
                 tightnessPrior = tightness;
-                tightness = tightness + fact;
-                fact = fact / 1.1;
+                tightness = tightness * fact;
+                upCount = upCount + 1;
+                if rem(upCount, 5) == 0
+                    fact = sqrt(fact);
+                end
             elseif fwCur < noiseFWHM
                 tightnessPrior = tightness;
-                tightness = tightness - fact;
+                tightness = tightness / fact;
             end
             
+            % Ensuring the recursion doesn't get stuck
+            tic;
+            elT = toc;
+            if elT > 35
+                fact = 1.2;
+                tic;
+            end
             [nFilter, smVecROI] = tightener(nFilter, tightness, tightnessPrior);
         end
-        
-        
         
         histfit(smVecROI, round(length(unique(smVecROI)) / 16))
         title('Fitted peak with randomly-selected normal smearing');
