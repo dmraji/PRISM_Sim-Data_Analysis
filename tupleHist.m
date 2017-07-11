@@ -38,8 +38,10 @@ function [coinAll, coinAllEn, coinTr, coinEn, en, noNoiseEn, evNum, timeAdj, tim
     detID = dataNC(2:end, 5);
     process = dataNC(2:end, 6);
     DOI = dataNC(2:end, 7);
-    HP = dataNC(2:end, 8);
-    time = dataNC(2:end, 9);
+    Phi = dataNC(2:end, 8);
+    Theta = dataNC(2:end, 9);
+    HP = dataNC(2:end, 10);
+    time = dataNC(2:end, 11);
     
     % Adjustments for "noise" from sim - largely result of ...
     % transport "scatterings" in G4
