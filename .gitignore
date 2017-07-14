@@ -1,1 +1,5 @@
-output_662keV_rand_cone_SA1D_HP912_abridged.txt
+# output files
+output_662keV_1Det_cone_phi0_theta90_abgd
+
+# ASV files
+*.asv
