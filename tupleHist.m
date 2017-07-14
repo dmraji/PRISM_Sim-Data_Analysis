@@ -62,167 +62,6 @@ function [smEnTC] = tupleHist()
 %     ylabel('Counts');
 %     grid on;
     
-    % Grabbing the ROI from the "No-Noise" energy spectrum and ...
-    % performing some Gaussian smearing as well as a fit
-%     function [noiseFWHM] = ROI()
-%         [peakCts, peakInd] = max(tabbedEn(:, 2));
-%         peakEn = tabbedEn(peakInd, 1);
-%         n = 1;
-%         
-%         % Assuming a measurement of 10 keV-FWHM for electronic noise
-%         elecNoiseFWHM = 8.25;
-%         elecNoiseSTDDEV = elecNoiseFWHM / 2.355;
-%         
-%         % For an average ionization energy in CZT of 5 eV
-%         qCarrGenN = peakEn / 0.005;
-%         % For an average pulse height of 0.350 V
-%         propCons = 0.350 / qCarrGenN;
-%         statNoiseSTDDEV = propCons * sqrt(qCarrGenN);
-%         
-%         % Adding noise stddevs in quadrature
-%         noiseDev = sqrt((elecNoiseSTDDEV ^ 2) + (statNoiseSTDDEV ^ 2));
-%         noiseFWHM = 2.355 * noiseDev;
-%         
-%         while n <= peakCts
-%             vecROI(n) = peakEn;
-%             n = n + 1;
-%         end
-%         nFilter = [];
-%         tightness = 128;
-%         
-%         [nFilter, smVecROI, howTight] = tightener(nFilter, tightness);
-%         
-%         % Adjusting the fwhm of the spectrum to match that of the ...
-%         % target (the noise fwhm)
-%         function [nFilter, smVecROI, howTight] = tightener(nFilter, howTight)
-%             nFilter = [];
-%             while length(nFilter) ~= length(vecROI)
-%                 
-%                 filterFiller = randn / howTight; 
-%                 % tightening spread of randn takes resolution at FWHM to  ...
-%                 % approximately 2-percent (13.24 keV is exactly 2%)
-% 
-%                 if filterFiller
-%                     nFilter = [nFilter, filterFiller + 1];
-%                 end
-%             end
-%             smVecROI = nFilter .* vecROI;
-%         end
-%         
-%         [binInds, binEdges] = discretize(smVecROI, round(length(unique(smVecROI)) / 8));
-%         tabbedBinInds = tabulate(binInds);
-%         p = 1;
-%         halfDiff = 1000;
-%         diffr = 0;
-%         fwCur = 1000;
-%         [rows, cols] = size(tabbedBinInds);
-%         fact = 1.2;
-%         upCount = 0;
-%         tic;
-%         
-%         % Tracking down the most accurate bins for the half-max
-%         while round(noiseFWHM, 1) ~= round(fwCur, 1)
-%             
-%             [binInds, binEdges] = discretize(smVecROI, round(length(unique(smVecROI)) / 16));
-%             tabbedBinInds = tabulate(binInds);
-%             p = 1;
-%             halfDiff = 1000000;
-%             diffr = 0;
-%             fwCur = 1000000;
-%             [rows, cols] = size(tabbedBinInds);
-%             hm = max(tabbedBinInds(:, 2)) / 2;
-%             
-%             % two while loops to grab energies of the left and right ...
-%             % edges of the fwhm
-%             while p < round(rows / 2)
-%                 diffr = abs(hm - tabbedBinInds(p, 2));
-%                 if diffr < halfDiff
-%                     halfDiff = diffr;
-%                     fwIndLeft = (binEdges(p) + binEdges(p + 1)) / 2;
-%                 end
-%                 p = p + 1;
-%             end
-% 
-%             halfDiff = 1000000;
-%             while p < rows
-%                 diffr = abs(hm - tabbedBinInds(p, 2));
-%                 if diffr < halfDiff
-%                     halfDiff = diffr;
-%                     fwIndRight = (binEdges(p) + binEdges(p + 1)) / 2;
-%                 end
-%                 p = p + 1;
-%             end
-% 
-%             % Checking whether the current FWHM is smaller or larger ...
-%             % than that dictated by the noise
-%             fwCur = fwIndRight - fwIndLeft;
-%             
-%             if fwCur > noiseFWHM
-%                 tightness = tightness * fact;
-%                 upCount = upCount + 1;
-%                 if rem(upCount, 5) == 0
-%                     fact = sqrt(fact);
-%                 end
-%             elseif fwCur < noiseFWHM
-%                 tightness = tightness / fact;
-%             end
-%             
-%             % Ensuring the recursion doesn't get stuck
-%             elT = toc;
-%             if elT > 25
-%                 fact = 1.2;
-%                 tic;
-%             end
-%             [nFilter, smVecROI, howTight] = tightener(nFilter, tightness);
-%         end
-%         
-%         histfit(smVecROI, round(length(unique(smVecROI)) / 16))
-%         title('Fitted peak with randomly-selected normal smearing');
-%         xlabel('Energy, keV');
-%         ylabel('Counts');
-%         grid on;
-%         fprintf('Press any key to continue.\n');
-%         pause
-%         histSmeared(peakEn, smVecROI);
-%         resp = input('Is there another peak? (y / n)\n', 's');
-%         if strcmp(resp, 'y')
-%             try
-%                 j1 = 1;
-%                 while j1 <= 9
-%                     tabbedEn(peakInd + j1 - 5, 2) = 0;
-%                     j1 = j1 + 1;
-%                 end
-%             end
-%             ROI;
-%         elseif strcmp(resp, 'n')
-%             fprintf('Moving on ...\n');
-%         end
-%     end
-% 
-%     % Integrating smeared peak back into full spectrum
-%     function histSmeared(peakEn, smVecROI)
-%         x = 1;
-%         y = 1;
-%         smEn = noNoiseEn;
-%         while x <= length(noNoiseEn)
-%             if smEn(x) == peakEn
-%                 smEn(x) = smVecROI(y);
-%                 y = y + 1;
-%             end
-%             x = x + 1;
-%         end
-%         
-%         smEn = background(smEn);
-%         
-%         histogram(smEn, 1024)
-%         title('Energy spectrum with smeared peak, binned');
-%         xlabel('Energy, keV');
-%         ylabel('Counts');
-%         grid on;
-%         fprintf('Press any key to continue.\n');
-%         pause
-%     end
-    
     % Coincidence considerations
     i = 1;
     ii = 1;
@@ -304,6 +143,8 @@ function [smEnTC] = tupleHist()
     coinEn = coinEn(find(coinTr));
     
     % Timing adjustment for lack of true "global" time in simulation
+    % Also adjusting energy vector due to limitations of real detector ...
+    % (summing multi-track events contained within detector)
     function [timeSaver] = timeAdjUq(ind, timeSaver)
         timePl = -1 * log(rand) / (act);
         if timeSaver == 0
@@ -385,13 +226,7 @@ function [smEnTC] = tupleHist()
     noTrtime = find(helpVec);
     
     tabbedEn = tabulate(round(noTrTCen));
-    
-%     ROI;
-%     fprintf('Press any key to continue.\n');
-%     pause
-    
-    % Summing energy for coincident events "too fast" for real crystal ...
-    % to differentiate
+
     [noiseFWHM, howTight] = ROITC;
     
     function [noiseFWHM, howTight] = ROITC()
@@ -399,7 +234,7 @@ function [smEnTC] = tupleHist()
         peakEn = tabbedEn(peakInd, 1);
         n = 1;
         
-        % Assuming a measurement of 10 keV-FWHM for electronic noise
+        % Assuming a measurement of 9.5 keV-FWHM for electronic noise
         elecNoiseFWHM = 9.5;
         elecNoiseSTDDEV = elecNoiseFWHM / 2.355;
         
@@ -514,23 +349,23 @@ function [smEnTC] = tupleHist()
         grid on;
         fprintf('Press any key to continue.\n');
         pause
-        histSmearedTC(peakEn, smVecROI);
-        resp = input('Is there another peak? (y / n)\n', 's');
-        if strcmp(resp, 'y')
-            try
-                j1 = 1;
-                while j1 <= 9
-                    tabbedEn(peakInd + j1 - 5, 2) = 0;
-                    j1 = j1 + 1;
-                end
-            end
-            ROI;
-        elseif strcmp(resp, 'n')
-            fprintf('Moving on ...\n');
-        end
+        histSmearedTC(peakEn, smVecROI, howTight);
+%         resp = input('Is there another peak? (y / n)\n', 's');
+%         if strcmp(resp, 'y')
+%             try
+%                 j1 = 1;
+%                 while j1 <= 9
+%                     tabbedEn(peakInd + j1 - 5, 2) = 0;
+%                     j1 = j1 + 1;
+%                 end
+%             end
+%             ROITC;
+%         elseif strcmp(resp, 'n')
+%             fprintf('Moving on ...\n');
+%         end
     end
         
-    function histSmearedTC(peakEn, smVecROI)
+    function histSmearedTC(peakEn, smVecROI, howTight)
         x = 1;
         y = 1;
         smEnTC = noTrTCen;
@@ -539,28 +374,12 @@ function [smEnTC] = tupleHist()
             if round(smEnTC(x)) == peakEn
                 smEnTC(x) = smVecROI(y);
                 y = y + 1;
+            else 
+                noiseFilter = randn / howTight;
+                smEnTC(x) = smEnTC(x) .* (noiseFilter + 1);
             end
             x = x + 1;
         end
-        
-%         o = 1;
-%         while o < length(coinTr)
-%             if coinTr(o) == 0
-%                 o = o + 1;
-%             else
-%                 oo = 1;
-%                 while coinTr(o) == coinTr(o + oo)
-%                     try
-%                         smEnTC(o) = smEnTC(o) + smEnTC(o + oo);
-%                     catch
-%                         break
-%                     end
-%                     smEnTC(o + oo) = 0;
-%                     oo = oo + 1;
-%                 end
-%                 o = o + oo;
-%             end
-%         end
         
         smEnTC = background(smEnTC);
 
@@ -599,7 +418,7 @@ function [smEnTC] = tupleHist()
 
         end
         
-        histogram(smEnTC, 512)
+        histogram(smEnTC, 1024)
         title('Energy spectrum with smeared peak, binned');
         xlabel('Energy, keV');
         ylabel('Counts');
