@@ -238,11 +238,12 @@ function [smEnTC] = tupleHist()
         elecNoiseFWHM = 9.5;
         elecNoiseSTDDEV = elecNoiseFWHM / 2.355;
         
-        % For an average ionization energy in CZT of 5 eV
+        % Statistical noise for peak
         qCarrGenN = peakEn / 0.005;
-        % For an average pulse height of 0.350 V
-        propCons = 0.350 / qCarrGenN;
-        statNoiseSTDDEV = propCons * sqrt(qCarrGenN);
+        fano = 0.1;
+        statResLim = 2.355 * sqrt(fano / qCarrGenN);
+        statFWHM = statResLim * peakEn;
+        statNoiseSTDDEV = statFWHM / 2.355;
         
         % Adding noise stddevs in quadrature
         noiseDev = sqrt((elecNoiseSTDDEV ^ 2) + (statNoiseSTDDEV ^ 2));
@@ -349,7 +350,7 @@ function [smEnTC] = tupleHist()
         grid on;
         fprintf('Press any key to continue.\n');
         pause
-        histSmearedTC(peakEn, smVecROI, howTight);
+        histSmearedTC(peakEn, smVecROI, howTight, elecNoiseSTDDEV);
 %         resp = input('Is there another peak? (y / n)\n', 's');
 %         if strcmp(resp, 'y')
 %             try
@@ -365,7 +366,7 @@ function [smEnTC] = tupleHist()
 %         end
     end
         
-    function histSmearedTC(peakEn, smVecROI, howTight)
+    function histSmearedTC(peakEn, smVecROI, howTight, elecNoiseSTDDEV)
         x = 1;
         y = 1;
         smEnTC = noTrTCen;
@@ -374,9 +375,18 @@ function [smEnTC] = tupleHist()
             if round(smEnTC(x)) == peakEn
                 smEnTC(x) = smVecROI(y);
                 y = y + 1;
-            else 
-                noiseFilter = randn / howTight;
-                smEnTC(x) = smEnTC(x) .* (noiseFilter + 1);
+            else
+                
+                qCarrGenN = smEnTC(x) / 0.005;
+                fano = 0.1;
+                statResLim = 2.355 * sqrt(fano / qCarrGenN);
+                statFWHM = statResLim * smEnTC(x);
+                statNoiseSTDDEV = statFWHM / 2.355;
+                
+                noiseDev = sqrt((elecNoiseSTDDEV ^ 2) + (statNoiseSTDDEV ^ 2));
+                
+                noiseFilter = randn * noiseDev;
+                smEnTC(x) = smEnTC(x) + (noiseFilter);
             end
             x = x + 1;
         end
@@ -417,6 +427,15 @@ function [smEnTC] = tupleHist()
             end
 
         end
+        
+        filterCheck = 1;
+        while filterCheck <= length(smEnTC)
+            if smEnTC(filterCheck) < 40
+                smEnTC(filterCheck) = [];
+            else
+                filterCheck = filterCheck + 1;
+            end
+        end                
         
         histogram(smEnTC, 1024)
         title('Energy spectrum with smeared peak, binned');
