@@ -1,5 +1,11 @@
 # output files
-output_662keV_1Det_cone_phi0_theta90_abgd
+output_662keV_1Det_cone_phi0_theta90_abgd.txt
+output_662keV_1Det_coneWide_phi0_theta90_abgd.txt
+output_662keV_1Det_isotropic_phi0_theta90_abgd.txt
 
 # ASV files
 *.asv
+
+# old files
+tupleHist_old.m
+tupleHist_doitoobigbackscat.m

@@ -1,17 +1,17 @@
-function [smEnTC] = tupleHist()
+function [smEnTC, timeAdj] = tupleHist()
     
     % NOTE: File read-in currently does not work with Octave
 
     % Constants for decay (Cs-137)
-    % Assuming source strength of 0.10 microCi
+    % Assuming source strength of 10 microCi
     lam = 0.693 / (30 * 3.154 * (10^7));
-    N = (0.1008 * 3.7*(10^4)) / lam;
-    act = lam * N;
+    N = (10.08 * 3.7*(10^4)) / lam;
+    act = lam * N / 1000000000;
 
     % Grabbing data from G4 PRISM_Sim output file, transforming into matrix
     % pr = 'Enter file name.';
     % fn = input(pr, 's');
-    fn = 'output_662keV_1Det_cone_phi0_theta90.txt';
+    fn = 'output_662keV_1Det_coneWide_phi0_theta90.txt';
     fID = fopen(fn, 'r');
     line = fgetl(fID);
     fclose(fID);
@@ -91,8 +91,8 @@ function [smEnTC] = tupleHist()
                 coinTr(i) = evNum(i);
                 coinTr(i-1) = evNum(i-1);
                 
-                TCen(i-ctr) = TCen(i-ctr) + TCen(i);
-                TCen(i) = 0;
+%                 TCen(i-ctr) = TCen(i-ctr) + TCen(i);
+%                 TCen(i) = 0;
                 timeAdj(i) = timeAdj(i-1) + tTracker;
                 i = i + 1;
                 ctr = ctr + 1;
@@ -106,8 +106,8 @@ function [smEnTC] = tupleHist()
                     coinTr(i) = evNum(i);
                     coinTr(i-1) = evNum(i-1);
 
-                    TCen(i-ctr) = TCen(i-ctr) + TCen(i);
-                    TCen(i) = 0;
+%                     TCen(i-ctr) = TCen(i-ctr) + TCen(i);
+%                     TCen(i) = 0;
 
                     timeAdj(i) = timeAdj(i-1) + tTracker;
                     i = i + 1
@@ -126,8 +126,8 @@ function [smEnTC] = tupleHist()
                         coinTr(i) = evNum(i);
                         coinTr(i-1) = evNum(i-1);
                         
-                        TCen(i-ctr) = TCen(i-ctr) + TCen(i);
-                        TCen(i) = 0;
+%                         TCen(i-ctr) = TCen(i-ctr) + TCen(i);
+%                         TCen(i) = 0;
                         
                         timeAdj(i) = timeAdj(i-1) + tTracker;
                         i = i + 1;
@@ -168,25 +168,73 @@ function [smEnTC] = tupleHist()
 
     % identifying "false" coincidences based on time (including ...
     % adjustments)
+    % Also adjusting energy vector to sum chance coincident depositions ...
+    % and for charge loss with DOI consideration
+    
+    muTaoEl = 0.01;
+    muTaoHo = 0.0008;
+
+    bias = 1000;
+
+    detdepth = 1;
+    
     k = 1;
     coinAll = evNum;
     while k < length(timeAdj)
-        if ((timeAdj(k) + 0.005) >= timeAdj(k+1)) && ((timeAdj(k) - 0.005) <= timeAdj(k+1)) && (detID(k) == detID(k+1))
+        % Note: 1.3 mircoseconds discussed in meeting as being current
+        % goal = 0.45 microSec
+        if ((timeAdj(k) + 1000) >= timeAdj(k+1)) && ((timeAdj(k) - 1000) <= timeAdj(k+1))
+            
             coinAll(k) = 1;
             coinAll(k+1) = 1;
-            k = k + 2;
-        elseif k > 1
-            if ((timeAdj(k) + 0.005) >= timeAdj(k-1)) && ((timeAdj(k) - 0.005) <= timeAdj(k-1)) && (detID(k) == detID(k-1))
-                coinAll(k) = 1;
-                k = k + 1;
-            else
-                coinAll(k) = 0;
-                k = k + 1;
+            
+            TCen(k) = TCen(k) + TCen(k+1);
+            TCen(k+1) = 0;
+            DOI(k) = -1;
+            doiHold = DOI(k+1);
+            DOI(k) = doiHold;
+            DOI(k+1) = -1;
+            ctr1 = 2;
+            try
+                while ((timeAdj(k) + 1000) >= timeAdj(k+ctr1)) && ((timeAdj(k) - 1000) <= timeAdj(k+ctr1))
+                    coinAll(k+ctr1) = 1;
+                    TCen(k) = TCen(k) + TCen(k+ctr1);
+                    TCen(k+ctr1) = 0;
+                    DOI(k+ctr1-1) = -1;
+                    doiHold = DOI(k+ctr1);
+                    DOI(k) = doiHold;
+                    DOI(k+ctr1) = -1;
+                    ctr1 = ctr1 + 1;
+                end
             end
+            
+            % Charge collection efficiency
+%             CCE = ((muTaoEl * bias)/(detdepth) * (1 - exp(-(detdepth - (DOI(k) * 0.1)) / (muTaoEl * bias)))) + ((muTaoHo * bias)/(detdepth) * (1 - exp(-(DOI(k) * 0.1) / (muTaoHo * bias))));
+%                 
+%             enCl = TCen(k) .* CCE;
+%             TCen(k) = enCl;
+            
+            k = k + ctr1;
         else
             coinAll(k) = 0;
+            
+%             CCE = ((muTaoEl * bias)/(detdepth) * (1 - exp(-(detdepth - (DOI(k) * 0.1)) / (muTaoEl * bias)))) + ((muTaoHo * bias)/(detdepth) * (1 - exp(-(DOI(k) * 0.1) / (muTaoHo * bias))));
+%                 
+%             enCl = TCen(k) .* CCE;
+%             TCen(k) = enCl;
+            
             k = k + 1;
-        end   
+        end
+    end
+    if k == length(timeAdj)
+        if en(k) == TCen(k)
+            
+%             CCE = ((muTaoEl * bias)/(detdepth) * (1 - exp(-(detdepth - (DOI(k) * 0.1)) / (muTaoEl * bias)))) + ((muTaoHo * bias)/(detdepth) * (1 - exp(-(DOI(k) * 0.1) / (muTaoHo * bias))));
+%                 
+%             enCl = TCen(k) .* CCE;
+%             TCen(k) = enCl;
+            
+        end
     end
     if coinAll(end) ~= 1
         coinAll(end) = 0;
@@ -205,6 +253,7 @@ function [smEnTC] = tupleHist()
     
     % Adjusting data vectors to remove transport processes
     noTrTCen = nonzeros(TCen);
+%     noTrDOI = DOI(DOI >= 0);
     
     helpVec = TCen;
     itn = 1;
@@ -214,16 +263,16 @@ function [smEnTC] = tupleHist()
         end
         itn = itn + 1;
     end
-    noTrevNum = find(helpVec);
-    noTrhitNum = find(helpVec);
-    noTrtrackID = find(helpVec);
-    noTrdetID = find(helpVec);
-    noTrprocess = find(helpVec);
-    noTrDOI = find(helpVec);
-    noTrPhi = find(helpVec);
-    noTrTheta = find(helpVec);
-    noTrHP = find(helpVec);
-    noTrtime = find(helpVec);
+    noTrevNum = evNum(find(helpVec));
+    noTrhitNum = hitNum(find(helpVec));
+    noTrtrackID = trackID(find(helpVec));
+    noTrdetID = detID(find(helpVec));
+    noTrprocess = process(find(helpVec));
+    noTrDOI = DOI(find(helpVec));
+    noTrPhi = Phi(find(helpVec));
+    noTrTheta = Theta(find(helpVec));
+    noTrHP = HP(find(helpVec));
+    noTrtime = time(find(helpVec));
     
     tabbedEn = tabulate(round(noTrTCen));
 
@@ -367,6 +416,7 @@ function [smEnTC] = tupleHist()
     end
         
     function histSmearedTC(peakEn, smVecROI, howTight, elecNoiseSTDDEV)
+        
         x = 1;
         y = 1;
         smEnTC = noTrTCen;
@@ -389,12 +439,40 @@ function [smEnTC] = tupleHist()
                 smEnTC(x) = smEnTC(x) + (noiseFilter);
             end
             x = x + 1;
+            
         end
+        
+        smEnTC = chargeLoss(smEnTC);
         
         smEnTC = background(smEnTC);
 
+        function [smEnTC] = chargeLoss(smEnTC)
+            
+            % Numbers based on Michelle's dissertation
+            muTaoEl = 0.01;
+            muTaoHo = 0.0008;
+            
+            bias = 1000;
+            
+            detdepth = 1;
+            
+            clct = 1;
+            while clct <= length(smEnTC)
+                % Max CCE is 0.9516, min is 0.5708 (for DOI = 0 & 10, ...
+                % resp.)
+                CCE = ((muTaoEl * bias)/(detdepth) * (1 - exp(-(detdepth - (noTrDOI(clct) * 0.1)) / (muTaoEl * bias)))) + ((muTaoHo * bias)/(detdepth) * (1 - exp(-(noTrDOI(clct) * 0.1) / (muTaoHo * bias))));
+                
+                enCL = smEnTC(clct) .* CCE;
+                smEnTC(clct) = enCL;
+                clct = clct + 1;
+            end
+            
+        end
+        
+        
         % Adding the measured background into the spectrum
         function [smEnTC] = background(smEnTC)
+            
             bgfn = 'July12_40Vg_DG80_background.txt';
             bgfID = fopen(bgfn, 'r');
             bgdata = fscanf(bgfID, '%f');
@@ -419,6 +497,7 @@ function [smEnTC] = tupleHist()
             end
 
             bgHist = (662 * bgHist) / 675;
+%             bgHist 
 
             bgitr = 1;
             while bgitr <= length(bgHist) / 3.75
@@ -427,17 +506,28 @@ function [smEnTC] = tupleHist()
             end
 
         end
+
         
+        % Filtering low- and high-energy events
         filterCheck = 1;
         while filterCheck <= length(smEnTC)
-            if smEnTC(filterCheck) < 40
+            if smEnTC(filterCheck) < 50
                 smEnTC(filterCheck) = [];
             else
                 filterCheck = filterCheck + 1;
             end
-        end                
+        end
         
-        histogram(smEnTC, 1024)
+        filterCheck = 1;
+        while filterCheck <= length(smEnTC)
+            if smEnTC(filterCheck) > 800
+                smEnTC(filterCheck) = [];
+            else
+                filterCheck = filterCheck + 1;
+            end
+        end
+        
+        histogram(smEnTC, 800)
         title('Energy spectrum with smeared peak, binned');
         xlabel('Energy, keV');
         ylabel('Counts');
