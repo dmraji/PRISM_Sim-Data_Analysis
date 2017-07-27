@@ -1,4 +1,4 @@
-function [smEnTC, timeAdj] = tupleHist()
+function tupleHist()
     
     % NOTE: File read-in currently does not work with Octave
 
@@ -11,11 +11,11 @@ function [smEnTC, timeAdj] = tupleHist()
     % Grabbing data from G4 PRISM_Sim output file, transforming into matrix
     % pr = 'Enter file name.';
     % fn = input(pr, 's');
-    fn = 'output_662keV_1Det_coneWide_phi0_theta90.txt';
+    fn = 'output_662keV_1Det_isotropic_phi0_theta90_abgd.txt';
     fID = fopen(fn, 'r');
-    line = fgetl(fID);
+    line1 = fgetl(fID);
     fclose(fID);
-    isStrCol = isnan(str2double(regexp(line, '[^\t]+', 'match')));
+    isStrCol = isnan(str2double(regexp(line1, '[^\t]+', 'match')));
     
     format = cell(1, numel(isStrCol));
     format(isStrCol) = {'%s'};
@@ -47,7 +47,7 @@ function [smEnTC, timeAdj] = tupleHist()
     
     % Adjustments for "noise" from sim - largely result of ...
     % transport "scatterings" in G4
-    noNoiseEn = en;
+    
 %     histogram(noNoiseEn, 256)
 %     title('Energy, Binned');
 %     xlabel('Energy, keV');
@@ -83,7 +83,7 @@ function [smEnTC, timeAdj] = tupleHist()
         if i == 1
             coinTr(i) = 0;
             timeSaver = timeAdjUq(i, timeSaver);
-            i = i + 1;
+            i = i + 1; 
             ctr = 1;
             while evNum(i-1) == evNum(i)
                 tTracker = time(i) - time(i-1);
@@ -137,6 +137,7 @@ function [smEnTC, timeAdj] = tupleHist()
             end
         end
         ii = ii + 1;
+        
     end
     
     coinEn = coinTr .* en;
@@ -168,74 +169,99 @@ function [smEnTC, timeAdj] = tupleHist()
 
     % identifying "false" coincidences based on time (including ...
     % adjustments)
-    % Also adjusting energy vector to sum chance coincident depositions ...
-    % and for charge loss with DOI consideration
-    
-    muTaoEl = 0.01;
-    muTaoHo = 0.0008;
-
-    bias = 1000;
-
-    detdepth = 1;
     
     k = 1;
     coinAll = evNum;
+    coinAllID = 1;
     while k < length(timeAdj)
         % Note: 1.3 mircoseconds discussed in meeting as being current
-        % goal = 0.45 microSec
+        % goal = 0.45 microSec window
         if ((timeAdj(k) + 1000) >= timeAdj(k+1)) && ((timeAdj(k) - 1000) <= timeAdj(k+1))
             
-            coinAll(k) = 1;
-            coinAll(k+1) = 1;
+            coinAll(k) = coinAllID;
+            coinAll(k+1) = coinAllID;
             
-            TCen(k) = TCen(k) + TCen(k+1);
-            TCen(k+1) = 0;
-            DOI(k) = -1;
-            doiHold = DOI(k+1);
-            DOI(k) = doiHold;
-            DOI(k+1) = -1;
+            % Finding a "weighted" DOI for multi-deposition events
+            holdEn1 = TCen(k);
+            holdEn2 = TCen(k+1);            
+            enSum = holdEn1 + holdEn2;
+            enAr = [holdEn1, holdEn2];
+                        
             ctr1 = 2;
             try
                 while ((timeAdj(k) + 1000) >= timeAdj(k+ctr1)) && ((timeAdj(k) - 1000) <= timeAdj(k+ctr1))
-                    coinAll(k+ctr1) = 1;
-                    TCen(k) = TCen(k) + TCen(k+ctr1);
-                    TCen(k+ctr1) = 0;
-                    DOI(k+ctr1-1) = -1;
-                    doiHold = DOI(k+ctr1);
-                    DOI(k) = doiHold;
-                    DOI(k+ctr1) = -1;
+                    coinAll(k+ctr1) = coinAllID;
+                    fracEnAr = [];
+                    
+                    holdEnX = TCen(k+ctr1);
+                    enSum = enSum + holdEnX;
+                    
+                    enAr(end+1) = holdEnX;
+                    
                     ctr1 = ctr1 + 1;
                 end
             end
+            if enSum ~= 0
+                fracEnAr = enAr / enSum;
+            else
+                fracEnAr = enAr;
+            end
+
+            doiWeighted = 0;
+            fracCtr = 1;
+            while fracCtr <= length(fracEnAr)
+                doiHold = DOI(k+fracCtr-1);
+                doiFracHold = fracEnAr(fracCtr) * doiHold;
+                doiWeighted = doiWeighted + doiFracHold;
+
+                fracCtr = fracCtr + 1;
+            end
             
-            % Charge collection efficiency
-%             CCE = ((muTaoEl * bias)/(detdepth) * (1 - exp(-(detdepth - (DOI(k) * 0.1)) / (muTaoEl * bias)))) + ((muTaoHo * bias)/(detdepth) * (1 - exp(-(DOI(k) * 0.1) / (muTaoHo * bias))));
-%                 
-%             enCl = TCen(k) .* CCE;
-%             TCen(k) = enCl;
+            if doiWeighted > 10
+                fprintf('something gone wrong yall (more than 10)\n');
+                saveAr = fracEnAr;
+            elseif (doiWeighted < 0) && (doiWeighted ~= -1)
+                fprintf('something gone wrong yall (less than 0)\n');
+                saveAr = fracEnAr;
+            end
+
+            if isnan(doiWeighted)
+                fprintf('something gone wrong yall (NaN)\n');
+                saveAr = fracEnAr;
+            end
+            
+            TCen(k) = TCen(k) + TCen(k+1);
+            TCen(k+1) = 0;
+            
+            ctr11 = ctr1;
+            ctr12 = ctr1;
+            try
+                while ctr11 > 2
+                    TCen(k) = TCen(k) + TCen(k+ctr11-1);
+                    TCen(k+ctr11-1) = 0;
+                    ctr11 = ctr11 - 1;
+                end
+            end
+            
+            DOI(k+1) = -1;
+            
+            try
+                while ctr12 > 2
+                    DOI(k+ctr12-1) = -1;
+                    ctr12 = ctr12 - 1;
+                end
+            end
+            
+            DOI(k) = doiWeighted;
             
             k = k + ctr1;
+            coinAllID = coinAllID + 1;
         else
             coinAll(k) = 0;
-            
-%             CCE = ((muTaoEl * bias)/(detdepth) * (1 - exp(-(detdepth - (DOI(k) * 0.1)) / (muTaoEl * bias)))) + ((muTaoHo * bias)/(detdepth) * (1 - exp(-(DOI(k) * 0.1) / (muTaoHo * bias))));
-%                 
-%             enCl = TCen(k) .* CCE;
-%             TCen(k) = enCl;
-            
             k = k + 1;
         end
     end
-    if k == length(timeAdj)
-        if en(k) == TCen(k)
-            
-%             CCE = ((muTaoEl * bias)/(detdepth) * (1 - exp(-(detdepth - (DOI(k) * 0.1)) / (muTaoEl * bias)))) + ((muTaoHo * bias)/(detdepth) * (1 - exp(-(DOI(k) * 0.1) / (muTaoHo * bias))));
-%                 
-%             enCl = TCen(k) .* CCE;
-%             TCen(k) = enCl;
-            
-        end
-    end
+    
     if coinAll(end) ~= 1
         coinAll(end) = 0;
     end
@@ -243,13 +269,13 @@ function [smEnTC, timeAdj] = tupleHist()
     coinAllEn = coinAll .* en;
     coinAllEn = coinAllEn(find(coinAll));
     
-    histogram(timeAdj, 100)
-    title('Time, Binned');
-    xlabel('Time, ns');
-    ylabel('Counts');
-    grid on;
-    fprintf('Press any key to continue.\n');
-    pause
+%     histogram(timeAdj, 100)
+%     title('Time, Binned');
+%     xlabel('Time, ns');
+%     ylabel('Counts');
+%     grid on;
+%     fprintf('Press any key to continue.\n');
+%     pause
     
     % Adjusting data vectors to remove transport processes
     noTrTCen = nonzeros(TCen);
@@ -283,8 +309,8 @@ function [smEnTC, timeAdj] = tupleHist()
         peakEn = tabbedEn(peakInd, 1);
         n = 1;
         
-        % Assuming a measurement of 9.5 keV-FWHM for electronic noise
-        elecNoiseFWHM = 9.5;
+        % Assuming a measurement of 10 keV-FWHM for electronic noise
+        elecNoiseFWHM = 10;
         elecNoiseSTDDEV = elecNoiseFWHM / 2.355;
         
         % Statistical noise for peak
@@ -392,6 +418,7 @@ function [smEnTC, timeAdj] = tupleHist()
             [nFilter, smVecROI, howTight] = tightenerTC(nFilter, tightness);
         end
         
+        
         histfit(smVecROI, round(length(unique(smVecROI)) / 16))
         title('Fitted peak with randomly-selected normal smearing');
         xlabel('Energy, keV');
@@ -457,23 +484,89 @@ function [smEnTC, timeAdj] = tupleHist()
             detdepth = 1;
             
             clct = 1;
+            dbgEnVec = [];
+            dbgOrigEnVec = [];
+            dbgDOIVec = [];
+            dbgEnVec2 = [];
+            
             while clct <= length(smEnTC)
-                % Max CCE is 0.9516, min is 0.5708 (for DOI = 0 & 10, ...
+                % Max CCE is 0.9550, min is 0.5708 (for DOI = 0 & 10, ...
                 % resp.)
-                CCE = ((muTaoEl * bias)/(detdepth) * (1 - exp(-(detdepth - (noTrDOI(clct) * 0.1)) / (muTaoEl * bias)))) + ((muTaoHo * bias)/(detdepth) * (1 - exp(-(noTrDOI(clct) * 0.1) / (muTaoHo * bias))));
+%                 CCE = ((muTaoEl * bias)/(detdepth) * (1 - exp(-(detdepth - (noTrDOI(clct) * 0.1)) / (muTaoEl * bias)))) + ((muTaoHo * bias)/(detdepth) * (1 - exp(-(noTrDOI(clct) * 0.1) / (muTaoHo * bias))));
+%                 adjFac = (0.9550 - CCE) * 0.85;
+%                 CCEadj = CCE + adjFac;
+% 
+%                 enCL = smEnTC(clct) .* CCEadj;
                 
-                enCL = smEnTC(clct) .* CCE;
+                % Adjusting for imperfect DG setting - linearly ...
+                % electron trapping with depth, up to 1 percent at ...
+                % DOI = 10mm
+                enMod1 = 1 - (noTrDOI(clct) * 0.001);
+                enCL = smEnTC(clct) * enMod1;
+                
+                % Exponential degradation of signal for interactions ...
+                % near anode
+                if noTrDOI(clct) <= 1
+                    expDeg = noTrDOI(clct) - 1;
+                    enMod2 = exp(expDeg);
+                    enCL = enCL * enMod2;
+                end
+                
+                % Adjusting for possibility for collection of holes in ...
+                % region near to cathode
+                if noTrDOI(clct) >= 8
+                    cathodeHoleCollection = (muTaoHo * bias)/(detdepth) * (1 - exp(-(1 - (noTrDOI(clct) * 0.1)) / (muTaoHo * bias)));
+                    enCL = enCL * (1 - (0.08 * cathodeHoleCollection));
+                end
+                
+                if enCL >= 600 && enCL <= 645 && smEnTC(clct) > 650
+                    dbgEnVec(end+1) = enCL;
+                    dbgOrigEnVec(end+1) = smEnTC(clct);
+                    dbgDOIVec(end+1) = noTrDOI(clct);
+                end
+                
+                if enCL >= 653 && enCL <= 673
+                    check = rand;
+                    if check <= 0.2
+                        
+                        check2 = rand;
+                        if check2 <= 0.21
+                            enCL = 648 + (randn / 2);
+                        elseif check2 <= 0.37
+                            enCL = 646 + (randn / 2);
+                        elseif check2 <= 0.50
+                            enCL = 644 + (randn / 2);
+                        elseif check2 <= 0.605
+                            enCL = 642 + (randn / 2);
+                        elseif check2 <= 0.70
+                            enCL = 640 + (randn / 2);
+                        elseif check2 <= 0.78
+                            enCL = 638 + (randn / 2);
+                        elseif check2 <= 0.85
+                            enCL = 636 + (randn / 2);
+                        elseif check2 <= 0.9125
+                            enCL = 634 + (randn / 2);
+                        elseif check2 <= 0.9685
+                            enCL = 632 + (randn / 2);
+                        else
+                            enCL = 630 + (randn / 2);
+                        end
+                    end
+                end
+                
                 smEnTC(clct) = enCL;
                 clct = clct + 1;
             end
             
         end
         
+        % Adjusting for charge loss shift
+        smEnTC = smEnTC + 7;
         
         % Adding the measured background into the spectrum
         function [smEnTC] = background(smEnTC)
             
-            bgfn = 'July12_40Vg_DG80_background.txt';
+            bgfn = 'July12_40Vg_DG80_background_tenmin.txt';
             bgfID = fopen(bgfn, 'r');
             bgdata = fscanf(bgfID, '%f');
             fclose(bgfID);
@@ -495,9 +588,9 @@ function [smEnTC, timeAdj] = tupleHist()
                 end
                 bgi = bgi + 1;
             end
-
+            
+            % Change this line for different isotopes/calibrations
             bgHist = (662 * bgHist) / 675;
-%             bgHist 
 
             bgitr = 1;
             while bgitr <= length(bgHist) / 3.75
@@ -506,7 +599,6 @@ function [smEnTC, timeAdj] = tupleHist()
             end
 
         end
-
         
         % Filtering low- and high-energy events
         filterCheck = 1;
@@ -518,18 +610,19 @@ function [smEnTC, timeAdj] = tupleHist()
             end
         end
         
-        filterCheck = 1;
-        while filterCheck <= length(smEnTC)
-            if smEnTC(filterCheck) > 800
-                smEnTC(filterCheck) = [];
-            else
-                filterCheck = filterCheck + 1;
-            end
-        end
+%         filterCheck = 1;
+%         while filterCheck <= length(smEnTC)
+%             if smEnTC(filterCheck) > 800
+%                 smEnTC(filterCheck) = [];
+%             else
+%                 filterCheck = filterCheck + 1;
+%             end
+%         end
         
-        histogram(smEnTC, 800)
-        title('Energy spectrum with smeared peak, binned');
+        histogram(smEnTC, 512)
+        title('Energy spectrum with smeared peak, binned (Simulation Data)');
         xlabel('Energy, keV');
+        xlim([0 1024]);
         ylabel('Counts');
         grid on;
     end
