@@ -13,6 +13,9 @@ function tupleHist()
     % Grabbing data from G4 PRISM_Sim output file, tr   ansforming into matrix
     % pr = 'Enter file name.';
     % fn = input(pr, 's');
+    
+    % Code block designed for reading Geant4 output files and may ...
+    %   require slight tweaking for different formats
     fn = 'output_662keV_1Det_isotropic_phi0_theta90.txt';
     fID = fopen(fn, 'r');
     line1 = fgetl(fID);
@@ -47,24 +50,14 @@ function tupleHist()
     HP = dataNC(2:end, 10);
     time = dataNC(2:end, 11);
     
-    % Adjustments for "noise" from sim - largely result of ...
-    % transport "scatterings" in G4
-    
-%     histogram(noNoiseEn, 256)
-%     title('Energy, Binned');
-%     xlabel('Energy, keV');
-%     ylabel('Counts');
-%     grid on;
-%     fprintf('Press any key to continue.\n');
-%     pause
-    
 %     histogram(DOI, 10)
 %     title('Depth of Interaction, Binned');
 %     xlabel('Depth of Interaction (mm)');
 %     ylabel('Counts');
 %     grid on;
     
-    % Coincidence considerations
+    % Coincidence Considerations ------------------------------------------
+    % Initializing indexing variables and modified arrays
     i = 1;
     ii = 1;
     
@@ -74,7 +67,7 @@ function tupleHist()
     TCen = en;
     
     % Considering events that miss the detector geometry, adjusting ...
-    % timing accordingly
+    %   timing accordingly
     while ii <= evNum(end) && i <= length(evNum)
         % Below block is legacy code - replaced with much faster ...
         % indexing farther below
@@ -92,7 +85,7 @@ function tupleHist()
                     timeSaver = timeAdjGhost(timeSaver);
                     ghostEvs = ghostEvs - 1;
                 end
-                ii = ii + evInc;
+            ii = ii + evInc;
         end
         
         if i == 1
@@ -106,8 +99,6 @@ function tupleHist()
                 coinTr(i) = evNum(i);
                 coinTr(i-1) = evNum(i-1);
                 
-%                 TCen(i-ctr) = TCen(i-ctr) + TCen(i);
-%                 TCen(i) = 0;
                 timeAdj(i) = timeAdj(i-1) + tTracker;
                 i = i + 1;
                 ctr = ctr + 1;
@@ -136,9 +127,6 @@ function tupleHist()
                     coinTr(i) = evNum(i);
                     coinTr(i-1) = evNum(i-1);
 
-%                     TCen(i-ctr) = TCen(i-ctr) + TCen(i);
-%                     TCen(i) = 0;
-
                     timeAdj(i) = timeAdj(i-1) + tTracker;
                     i = i + 1
                     ctr = ctr + 1;
@@ -156,9 +144,6 @@ function tupleHist()
                         coinTr(i) = evNum(i);
                         coinTr(i-1) = evNum(i-1);
                         
-%                         TCen(i-ctr) = TCen(i-ctr) + TCen(i);
-%                         TCen(i) = 0;
-                        
                         timeAdj(i) = timeAdj(i-1) + tTracker;
                         i = i + 1;
                         ctr = ctr + 1;
@@ -170,12 +155,12 @@ function tupleHist()
         
     end
     
+    % Primarily for debugging purposes
     coinEn = coinTr .* en;
     coinEn = coinEn(find(coinTr));
     
-    % Timing adjustment for lack of true "global" time in simulation
-    % Also adjusting energy vector due to limitations of real detector ...
-    % (summing multi-track events contained within detector)
+    % Timing adjustment functions for lack of true "global" time in ...
+    % Geant4 simulation readout
     function [timeSaver] = timeAdjUq(ind, timeSaver)
         timePl = -1 * log(rand) / (act);
         if timeSaver == 0
@@ -197,15 +182,20 @@ function tupleHist()
         end
     end
 
-    % identifying "false" coincidences based on time (including ...
-    % adjustments)
+    % Identifying "false" coincidences based on time (including ...
+    %   adjustments)
+    % Also adjusting energy vector due to limitations of real detector ...
+    %   (summing multi-track events contained within detector)
     
     k = 1;
     coinAll = evNum;
     coinAllID = 1;
     while k < length(timeAdj)
         % Note: 1.3 mircoseconds discussed in meeting as being current
-        % goal = 0.45 microSec window
+        % Goal = 0.45 microSec window
+        
+        % Units of time are ns, adjust number to vary window for chance ...
+        %   coincidence
         if ((timeAdj(k) + 1000) >= timeAdj(k+1)) && ((timeAdj(k) - 1000) <= timeAdj(k+1))
             
             coinAll(k) = coinAllID;
@@ -247,19 +237,20 @@ function tupleHist()
                 fracCtr = fracCtr + 1;
             end
             
+            % Debugging blocks            
             if doiWeighted > 10
-                fprintf('something gone wrong yall (more than 10)\n');
+                fprintf('something gone wrong (more than 10)\n');
                 saveAr = fracEnAr;
             elseif (doiWeighted < 0) && (doiWeighted ~= -1)
-                fprintf('something gone wrong yall (less than 0)\n');
+                fprintf('something gone wrong (less than 0)\n');
                 saveAr = fracEnAr;
             end
-
             if isnan(doiWeighted)
-                fprintf('something gone wrong yall (NaN)\n');
+                fprintf('something gone wrong (NaN)\n');
                 saveAr = fracEnAr;
             end
             
+            % Modifying energy and DOI vectors
             TCen(k) = TCen(k) + TCen(k+1);
             TCen(k+1) = 0;
             
@@ -299,6 +290,7 @@ function tupleHist()
     coinAllEn = coinAll .* en;
     coinAllEn = coinAllEn(find(coinAll));
     
+    % Un-comment block for debugging timing adjustment
 %     histogram(timeAdj, 100)
 %     title('Time, Binned');
 %     xlabel('Time, ns');
@@ -307,7 +299,7 @@ function tupleHist()
 %     fprintf('Press any key to continue.\n');
 %     pause
     
-    % Adjusting data vectors to remove transport processes
+    % Adjusting data vectors ----------------------------------------------
     noTrTCen = nonzeros(TCen);
 %     noTrDOI = DOI(DOI >= 0);
     
@@ -324,17 +316,30 @@ function tupleHist()
     noTrtrackID = trackID(find(helpVec));
     noTrdetID = detID(find(helpVec));
     noTrprocess = process(find(helpVec));
+    
+    % If everything went correctly with energy summing, noTrDOI should ...
+    %   have NO values less than 0 - uncomment below statement for ...
+    %   debugging
     noTrDOI = DOI(find(helpVec));
+    
+%     if any(noTrDOI < 0)
+%         fprintf('Bad news, negatives in en-summing modified DOI vec\n');
+%     end
+    
     noTrPhi = Phi(find(helpVec));
     noTrTheta = Theta(find(helpVec));
     noTrHP = HP(find(helpVec));
     noTrtime = time(find(helpVec));
     
+    % Tabulating energy vector to pick out peak
     tabbedEn = tabulate(round(noTrTCen));
-
+    
+    % Processing peak through smearing algorithms -------------------------
     [noiseFWHM, howTight] = ROITC;
     
     function [noiseFWHM, howTight] = ROITC()
+        
+        % Grabbing peak statistics
         [peakCts, peakInd] = max(tabbedEn(:, 2));
         peakEn = tabbedEn(peakInd, 1);
         n = 1;
@@ -364,15 +369,16 @@ function tupleHist()
         [nFilter, smVecROI, howTight] = tightenerTC(nFilter, tightness);
         
         % Adjusting the fwhm of the spectrum to match that of the ...
-        % target (the noise fwhm)
+        %   target (the noise fwhm)
         function [nFilter, smVecROI, howTight] = tightenerTC(nFilter, howTight)
             nFilter = [];
             while length(nFilter) ~= length(vecROI)
                 
                 filterFiller = randn / howTight; 
-                % tightening spread of randn takes resolution at FWHM to  ...
-                % approximately 2-percent (13.24 keV is exactly 2%) ...
-                % initially, will be revised in recursion later
+                % Tightening spread of randn takes resolution at FWHM ...
+                %   to approximately 2-percent (13.24 keV is exactly ...
+                %   2% for Cs-137) initially, will be revised in ...
+                %   recursion later
 
                 if filterFiller
                     nFilter = [nFilter, filterFiller + 1];
@@ -404,8 +410,8 @@ function tupleHist()
             [rows, cols] = size(tabbedBinInds);
             hm = max(tabbedBinInds(:, 2)) / 2;
             
-            % two while loops to grab energies of the left and right ...
-            % edges of the fwhm
+            % Two while loops to grab energies of the left and right ...
+            %   edges of the fwhm
             while p < round(rows / 2)
                 diffr = abs(hm - tabbedBinInds(p, 2));
                 if diffr < halfDiff
@@ -426,7 +432,7 @@ function tupleHist()
             end
 
             % Checking whether the current FWHM is smaller or larger ...
-            % than that dictated by the noise
+            %   than that dictated by the noise
             fwCur = fwIndRight - fwIndLeft;
             
             if fwCur > noiseFWHM
@@ -448,7 +454,7 @@ function tupleHist()
             [nFilter, smVecROI, howTight] = tightenerTC(nFilter, tightness);
         end
         
-        
+        % Demonstrating normally-smeared peak region
         histfit(smVecROI, round(length(unique(smVecROI)) / 16))
         title('Fitted peak with randomly-selected normal smearing');
         xlabel('Energy, keV');
@@ -456,7 +462,14 @@ function tupleHist()
         grid on;
         fprintf('Press any key to continue.\n');
         pause
+        
         histSmearedTC(peakEn, smVecROI, howTight, elecNoiseSTDDEV);
+        
+        % Uncomment below code if more than one peak - however, with ...
+        %   G4 gun limitations, unsure if this functionality would ever ...
+        %   be usable
+        % NOTE: Has not been extensively tested
+        
 %         resp = input('Is there another peak? (y / n)\n', 's');
 %         if strcmp(resp, 'y')
 %             try
@@ -477,7 +490,10 @@ function tupleHist()
         x = 1;
         y = 1;
         smEnTC = noTrTCen;
-                
+        
+        % Integrating "smeared" energies back into full spect in place ...
+        %   monoenergetic peak energies
+        % Also smearing of non-peak region
         while x <= length(noTrTCen)
             if round(smEnTC(x)) == peakEn
                 smEnTC(x) = smVecROI(y);
@@ -505,6 +521,12 @@ function tupleHist()
 
         function [smEnTC] = chargeLoss(smEnTC)
             
+            % NOTE: Algorithms constructed with consideration of CPG ...
+            %   and near-perfect DG optimization
+            % NOTE: Assuming detector positioning of cathode above ...
+            %   anode (if center of crystal is origin, cathode is at ...
+            %   +5mm on z-axis, anode is at -5mm on z-axis)
+            
             % Numbers based on Michelle's dissertation
             muTaoEl = 0.01;
             muTaoHo = 0.0008;
@@ -521,7 +543,8 @@ function tupleHist()
             
             while clct <= length(smEnTC)
                 % Max CCE is 0.9550, min is 0.5708 (for DOI = 0 & 10, ...
-                % resp.)
+                %   resp.)
+                
 %                 CCE = ((muTaoEl * bias)/(detdepth) * (1 - exp(-(detdepth - (noTrDOI(clct) * 0.1)) / (muTaoEl * bias)))) + ((muTaoHo * bias)/(detdepth) * (1 - exp(-(noTrDOI(clct) * 0.1) / (muTaoHo * bias))));
 %                 adjFac = (0.9550 - CCE) * 0.85;
 %                 CCEadj = CCE + adjFac;
@@ -531,14 +554,14 @@ function tupleHist()
                 enCL = smEnTC(clct) * 0.9516;
 
                 % Adjusting for imperfect DG setting - linearly ...
-                % electron trapping with depth, up to 0.5 percent at ...
-                % DOI = 10mm
+                %   electron trapping with depth, up to 0.5 percent at ...
+                %   DOI = 10mm
                 
                 enMod1 = 1 - (noTrDOI(clct) * 0.0005);
                 enCL = enCL * enMod1;
                 
                 % Exponential degradation of signal for interactions ...
-                % near anode
+                %   near anode
                 if noTrDOI(clct) <= 1
                     expDeg = noTrDOI(clct) - 1;
                     enMod2 = exp(expDeg);
@@ -546,7 +569,7 @@ function tupleHist()
                 end
                 
                 % Adjusting for possibility for collection of holes in ...
-                % region near to cathode
+                %   region near to cathode
                 if noTrDOI(clct) >= 8
 %                     cathodeHoleCollection = (muTaoHo * bias)/(detdepth) * (1 - exp(-(1 - (noTrDOI(clct) * 0.1)) / (muTaoHo * bias)));
 %                     enCL = enCL * (1 - (0.08 * cathodeHoleCollection));
@@ -573,7 +596,7 @@ function tupleHist()
             
         end
         
-        % Adjusting for charge loss shift
+        % Uniformly adjusting for charge loss shift
         smEnTC = smEnTC + 30;
         
         % Adding the measured background into the spectrum
@@ -583,7 +606,9 @@ function tupleHist()
             bgfID = fopen(bgfn, 'r');
             bgdata = fscanf(bgfID, '%f');
             fclose(bgfID);
-
+            
+            % Change this line if background taken with different ...
+            %   number of channels
             chs = 0:1:4096;
 
             bgHist = [];
@@ -613,7 +638,8 @@ function tupleHist()
 
         end
         
-        % Filtering low- and high-energy events
+        % Filtering low- and high-energy events for better comparison ...
+        %   to filtered experimental data
         filterCheck = 1;
         while filterCheck <= length(smEnTC)
             if smEnTC(filterCheck) < 50
@@ -632,7 +658,8 @@ function tupleHist()
             end
         end
         
-%         histogram(smEnTC, 512)
+        % Uncomment this line and comment lines 664 thru 670 for a bar hist
+%         histogram(smEnTC, 1024)
         
         [Nd, Xd] = hist(smEnTC, 1024);
         Hd = bar(Xd, Nd, 1);
@@ -647,6 +674,8 @@ function tupleHist()
         xlim([0 1024]);
         ylabel('Counts');
         grid on;
+        
+        % Uncomment these two lines if you wish to use the profile viewer
 %         fprintf('Press any key to continue.\n');
 %         pause
     end
