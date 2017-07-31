@@ -1,5 +1,7 @@
 function tupleHist()
     
+%     profile on;
+
     % NOTE: File read-in currently does not work with Octave
 
     % Constants for decay (Cs-137)
@@ -8,10 +10,10 @@ function tupleHist()
     N = (10.08 * 3.7*(10^4)) / lam;
     act = lam * N / 1000000000;
 
-    % Grabbing data from G4 PRISM_Sim output file, transforming into matrix
+    % Grabbing data from G4 PRISM_Sim output file, tr   ansforming into matrix
     % pr = 'Enter file name.';
     % fn = input(pr, 's');
-    fn = 'output_662keV_1Det_isotropic_phi0_theta90_abgd.txt';
+    fn = 'output_662keV_1Det_isotropic_phi0_theta90.txt';
     fID = fopen(fn, 'r');
     line1 = fgetl(fID);
     fclose(fID);
@@ -74,12 +76,25 @@ function tupleHist()
     % Considering events that miss the detector geometry, adjusting ...
     % timing accordingly
     while ii <= evNum(end) && i <= length(evNum)
-        if ~any(i==evNum)
-            while ~any(ii==evNum)
-                 timeSaver = timeAdjGhost(timeSaver);
-                 ii = ii + 1;
-            end
+        % Below block is legacy code - replaced with much faster ...
+        % indexing farther below
+%         if ~any(i==evNum)
+%             while ~any(ii==evNum)
+%                  timeSaver = timeAdjGhost(timeSaver);
+%                  ii = ii + 1;
+%             end
+%         end
+        
+        if evNum(i) == evNum(1)
+            evInc = evNum(i+1) - 1;
+                ghostEvs = evNum(i+1) - 1;
+                while ghostEvs > 0
+                    timeSaver = timeAdjGhost(timeSaver);
+                    ghostEvs = ghostEvs - 1;
+                end
+                ii = ii + evInc;
         end
+        
         if i == 1
             coinTr(i) = 0;
             timeSaver = timeAdjUq(i, timeSaver);
@@ -97,7 +112,22 @@ function tupleHist()
                 i = i + 1;
                 ctr = ctr + 1;
             end
-        else
+            
+        end
+        
+        if evNum(i-1) ~= evNum(end)
+            if evNum(i-1) ~= evNum(i)
+                evInc = evNum(i) - evNum(i-1);
+                ghostEvs = evNum(i) - evNum(i-1) - 1;
+                while ghostEvs > 0
+                    timeSaver = timeAdjGhost(timeSaver);
+                    ghostEvs = ghostEvs - 1;
+                end
+                ii = ii + evInc;
+            end
+        end
+        
+        if i ~= 1
             ctr = 1;
             try
                 while evNum(i-1) == evNum(i)
@@ -498,11 +528,14 @@ function tupleHist()
 % 
 %                 enCL = smEnTC(clct) .* CCEadj;
                 
+                enCL = smEnTC(clct) * 0.9516;
+
                 % Adjusting for imperfect DG setting - linearly ...
-                % electron trapping with depth, up to 1 percent at ...
+                % electron trapping with depth, up to 0.5 percent at ...
                 % DOI = 10mm
-                enMod1 = 1 - (noTrDOI(clct) * 0.001);
-                enCL = smEnTC(clct) * enMod1;
+                
+                enMod1 = 1 - (noTrDOI(clct) * 0.0005);
+                enCL = enCL * enMod1;
                 
                 % Exponential degradation of signal for interactions ...
                 % near anode
@@ -515,43 +548,23 @@ function tupleHist()
                 % Adjusting for possibility for collection of holes in ...
                 % region near to cathode
                 if noTrDOI(clct) >= 8
-                    cathodeHoleCollection = (muTaoHo * bias)/(detdepth) * (1 - exp(-(1 - (noTrDOI(clct) * 0.1)) / (muTaoHo * bias)));
-                    enCL = enCL * (1 - (0.08 * cathodeHoleCollection));
+%                     cathodeHoleCollection = (muTaoHo * bias)/(detdepth) * (1 - exp(-(1 - (noTrDOI(clct) * 0.1)) / (muTaoHo * bias)));
+%                     enCL = enCL * (1 - (0.08 * cathodeHoleCollection));
+                    if smEnTC(clct) > (peakEn - 100)
+                        enCL = enCL * 0.98;
+                        dister = randn / 16;
+                        while dister > -0.0560
+                            dister = randn / 16;
+                        end
+                        dister = dister + 1;
+                        enCL = 36 + (enCL * dister);
+                    end
                 end
                 
                 if enCL >= 600 && enCL <= 645 && smEnTC(clct) > 650
                     dbgEnVec(end+1) = enCL;
                     dbgOrigEnVec(end+1) = smEnTC(clct);
                     dbgDOIVec(end+1) = noTrDOI(clct);
-                end
-                
-                if enCL >= 653 && enCL <= 673
-                    check = rand;
-                    if check <= 0.2
-                        
-                        check2 = rand;
-                        if check2 <= 0.21
-                            enCL = 648 + (randn / 2);
-                        elseif check2 <= 0.37
-                            enCL = 646 + (randn / 2);
-                        elseif check2 <= 0.50
-                            enCL = 644 + (randn / 2);
-                        elseif check2 <= 0.605
-                            enCL = 642 + (randn / 2);
-                        elseif check2 <= 0.70
-                            enCL = 640 + (randn / 2);
-                        elseif check2 <= 0.78
-                            enCL = 638 + (randn / 2);
-                        elseif check2 <= 0.85
-                            enCL = 636 + (randn / 2);
-                        elseif check2 <= 0.9125
-                            enCL = 634 + (randn / 2);
-                        elseif check2 <= 0.9685
-                            enCL = 632 + (randn / 2);
-                        else
-                            enCL = 630 + (randn / 2);
-                        end
-                    end
                 end
                 
                 smEnTC(clct) = enCL;
@@ -561,7 +574,7 @@ function tupleHist()
         end
         
         % Adjusting for charge loss shift
-        smEnTC = smEnTC + 7;
+        smEnTC = smEnTC + 30;
         
         % Adding the measured background into the spectrum
         function [smEnTC] = background(smEnTC)
@@ -610,21 +623,34 @@ function tupleHist()
             end
         end
         
-%         filterCheck = 1;
-%         while filterCheck <= length(smEnTC)
-%             if smEnTC(filterCheck) > 800
-%                 smEnTC(filterCheck) = [];
-%             else
-%                 filterCheck = filterCheck + 1;
-%             end
-%         end
+        filterCheck = 1;
+        while filterCheck <= length(smEnTC)
+            if smEnTC(filterCheck) > 1024
+                smEnTC(filterCheck) = [];
+            else
+                filterCheck = filterCheck + 1;
+            end
+        end
         
-        histogram(smEnTC, 512)
+%         histogram(smEnTC, 512)
+        
+        [Nd, Xd] = hist(smEnTC, 1024);
+        Hd = bar(Xd, Nd, 1);
+        Hd.FaceAlpha = 0.0;
+
+        Nd = conv(Nd, ones(1, 1), 'same') / 1;
+        Hd = line(Xd, Nd);
+        set(Hd, 'color', 'g', 'linewidth', 1.25)
+        
         title('Energy spectrum with smeared peak, binned (Simulation Data)');
         xlabel('Energy, keV');
         xlim([0 1024]);
         ylabel('Counts');
         grid on;
+%         fprintf('Press any key to continue.\n');
+%         pause
     end
+
+%     profile viewer
 
 end
