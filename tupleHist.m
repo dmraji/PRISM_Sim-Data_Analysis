@@ -1,8 +1,8 @@
 function tupleHist()
     
-%     profile on;
-
     % NOTE: File read-in currently does not work with Octave
+
+%     profile on;
 
     % Constants for decay (Cs-137)
     % Assuming source strength of 10 microCi
@@ -10,13 +10,13 @@ function tupleHist()
     N = (10.08 * 3.7*(10^4)) / lam;
     act = lam * N / 1000000000;
 
-    % Grabbing data from G4 PRISM_Sim output file, tr   ansforming into matrix
+    % Grabbing data from G4 PRISM_Sim output file, transforming into matrix
     % pr = 'Enter file name.';
     % fn = input(pr, 's');
     
     % Code block designed for reading Geant4 output files and may ...
     %   require slight tweaking for different formats
-    fn = 'output_662keV_1Det_isotropic_phi0_theta90.txt';
+    fn = 'output_662keV_1Det_isotropic_phi360_theta90.txt';
     fID = fopen(fn, 'r');
     line1 = fgetl(fID);
     fclose(fID);
@@ -50,11 +50,33 @@ function tupleHist()
     HP = dataNC(2:end, 10);
     time = dataNC(2:end, 11);
     
+    % Uncomment below block for a non-processed spectrum 
+%     nonZen = nonzeros(en);
+%     
+%     [Nde, Xde] = hist(nonZen, 1024);
+%     Hde = bar(Xde, Nde, 1);
+%     Hde.FaceAlpha = 0.0;
+% 
+%     Nde = conv(Nde, ones(1, 1), 'same') / 1;
+%     Hde = line(Xde, Nde);
+%     set(Hde, 'color', 'g', 'linewidth', 0.8)
+% 
+%     title('Energy spectrum, binned (Simulation Data)');
+%     xlabel('Energy, keV');
+%     xlim([0 1024]);
+%     ylabel('Counts');
+%     grid on;
+%     fprintf('Press any key to continue.');
+%     pause;
+    
+    % Uncomment for DOI histogram
 %     histogram(DOI, 10)
 %     title('Depth of Interaction, Binned');
 %     xlabel('Depth of Interaction (mm)');
 %     ylabel('Counts');
 %     grid on;
+%     fprintf('Press any key to continue.');
+%     pause;
     
     % Coincidence Considerations ------------------------------------------
     % Initializing indexing variables and modified arrays
@@ -455,13 +477,13 @@ function tupleHist()
         end
         
         % Demonstrating normally-smeared peak region
-        histfit(smVecROI, round(length(unique(smVecROI)) / 16))
-        title('Fitted peak with randomly-selected normal smearing');
-        xlabel('Energy, keV');
-        ylabel('Counts');
-        grid on;
-        fprintf('Press any key to continue.\n');
-        pause
+%         histfit(smVecROI, round(length(unique(smVecROI)) / 16))
+%         title('Fitted peak with randomly-selected normal smearing');
+%         xlabel('Energy, keV');
+%         ylabel('Counts');
+%         grid on;
+%         fprintf('Press any key to continue.\n');
+%         pause
         
         histSmearedTC(peakEn, smVecROI, howTight, elecNoiseSTDDEV);
         
@@ -535,6 +557,10 @@ function tupleHist()
             
             detdepth = 1;
             
+            % Modify this variable for different isotope backscatter ...
+            %   peak energies
+            backScatPeakEn = 180;
+            
             clct = 1;
             dbgEnVec = [];
             dbgOrigEnVec = [];
@@ -542,16 +568,11 @@ function tupleHist()
             dbgEnVec2 = [];
             
             while clct <= length(smEnTC)
-                % Max CCE is 0.9550, min is 0.5708 (for DOI = 0 & 10, ...
-                %   resp.)
                 
-%                 CCE = ((muTaoEl * bias)/(detdepth) * (1 - exp(-(detdepth - (noTrDOI(clct) * 0.1)) / (muTaoEl * bias)))) + ((muTaoHo * bias)/(detdepth) * (1 - exp(-(noTrDOI(clct) * 0.1) / (muTaoHo * bias))));
-%                 adjFac = (0.9550 - CCE) * 0.85;
-%                 CCEadj = CCE + adjFac;
-% 
-%                 enCL = smEnTC(clct) .* CCEadj;
+                % Using Hecht's equation:
+                CCEmax = ((muTaoEl * bias)/(detdepth) * (1 - exp(-(detdepth - (0 * 0.1)) / (muTaoEl * bias)))) + ((muTaoHo * bias)/(detdepth) * (1 - exp(-(0 * 0.1) / (muTaoHo * bias))));
                 
-                enCL = smEnTC(clct) * 0.9516;
+                enCL = smEnTC(clct) * CCEmax;
 
                 % Adjusting for imperfect DG setting - linearly ...
                 %   electron trapping with depth, up to 0.5 percent at ...
@@ -568,19 +589,108 @@ function tupleHist()
                     enCL = enCL * enMod2;
                 end
                 
+                if noTrDOI(clct) <= 2
+                    if enCL > (peakEn * 0.9516) - 50
+                        enCL = enCL * 0.98;
+                        dister = randn / 10;
+                        while dister > -0.2040
+                            dister = randn / 10;
+                        end
+                        dister = dister + 1;
+                        enCL = 135 + (enCL * dister);
+                    end
+                    
+                end
+                
+                if noTrDOI(clct) > 2 && noTrDOI(clct) < 4
+                    if enCL > (peakEn * 0.9516) - 20
+                        if rand > 0.90
+                            disterLowEn = randn / 6;
+                            enCL = (enCL * (60 / smEnTC(clct))) * (disterLowEn + 1);
+                        end
+                    end
+                    
+                    if enCL > (backScatPeakEn * 0.9516) - 80 && smEnTC(clct) < (backScatPeakEn * 0.9516) + 20
+                        if rand > 0.60
+                            disterLowEn = randn / 6;
+                            enCL = (enCL * (60 / smEnTC(clct))) * (disterLowEn + 1);
+                        end
+                    end
+                    
+                    if enCL > (peakEn * 0.9516) - 5
+                        if rand < 0.2
+                            enCL = enCL * 0.7251;
+                            disterHiTail = randn / 12;
+                            while disterHiTail < 0.0860
+                                disterHiTail = randn / 12;
+                            end
+                            disterHiTail = disterHiTail + 1;
+                            enCL = (enCL * disterHiTail) - 44;
+                        elseif rand > 0.9925
+                            enCL = enCL / 100;
+                        end
+                    end
+                    
+                end
+                
                 % Adjusting for possibility for collection of holes in ...
                 %   region near to cathode
                 if noTrDOI(clct) >= 8
-%                     cathodeHoleCollection = (muTaoHo * bias)/(detdepth) * (1 - exp(-(1 - (noTrDOI(clct) * 0.1)) / (muTaoHo * bias)));
-%                     enCL = enCL * (1 - (0.08 * cathodeHoleCollection));
-                    if smEnTC(clct) > (peakEn - 100)
+                    
+                    if enCL > (peakEn * 0.9516) - 50
                         enCL = enCL * 0.98;
-                        dister = randn / 16;
-                        while dister > -0.0560
-                            dister = randn / 16;
+                        dister = randn / 10;
+                        while dister > -0.2040
+                            dister = randn / 10;
                         end
                         dister = dister + 1;
-                        enCL = 36 + (enCL * dister);
+                        enCL = 135 + (enCL * dister);
+                    end
+                        
+                end
+                
+                if noTrDOI(clct) > 6 && noTrDOI(clct) < 8
+                    if smEnTC(clct) > (peakEn * 0.9516) - 20
+                        if rand > 0.95
+                            disterLowEn = randn / 6;
+                            enCL = (enCL * (60 / smEnTC(clct))) * (disterLowEn + 1);
+                        end
+                    end
+                    
+                    if smEnTC(clct) > backScatPeakEn - 80 && smEnTC(clct) < backScatPeakEn + 20
+                        if rand > 0.75
+                            disterLowEn = randn / 6;
+                            enCL = (enCL * (60 / smEnTC(clct))) * (disterLowEn + 1);
+                        end
+                    end
+                    
+                    if enCL > (peakEn * 0.9516) - 5
+                        if rand < 0.2
+                            enCL = enCL * 0.7251;
+                            disterHiTail = randn / 12;
+                            while disterHiTail < 0.0860
+                                disterHiTail = randn / 12;
+                            end
+                            disterHiTail = disterHiTail + 1;
+                            enCL = (enCL * disterHiTail) - 44;
+                        elseif rand > 0.985
+                            enCL = enCL / 100;
+                        end
+                    end
+
+                end
+                
+                % Filtering out excess counts in compton continuum and ...
+                %   low-energy peak
+                if enCL < 65
+                    if rand < 0.25
+                        enCL = enCL / 100;
+                    end
+                end
+                if (enCL < 475.8) && (enCL > (240 * 0.9516))
+                    enLivMod = (enCL - (220 * 0.9516)) / 1000;
+                    if rand < enLivMod
+                        enCL = enCL / 100;
                     end
                 end
                 
@@ -597,7 +707,7 @@ function tupleHist()
         end
         
         % Uniformly adjusting for charge loss shift
-        smEnTC = smEnTC + 30;
+        smEnTC = smEnTC * 1.0509;
         
         % Adding the measured background into the spectrum
         function [smEnTC] = background(smEnTC)
@@ -659,15 +769,15 @@ function tupleHist()
         end
         
         % Uncomment this line and comment lines 664 thru 670 for a bar hist
-%         histogram(smEnTC, 1024)
+        histogram(smEnTC, 1024)
         
-        [Nd, Xd] = hist(smEnTC, 1024);
-        Hd = bar(Xd, Nd, 1);
-        Hd.FaceAlpha = 0.0;
-
-        Nd = conv(Nd, ones(1, 1), 'same') / 1;
-        Hd = line(Xd, Nd);
-        set(Hd, 'color', 'g', 'linewidth', 1.25)
+%         [Nd, Xd] = hist(smEnTC, 1024);
+%         Hd = bar(Xd, Nd, 1);
+%         Hd.FaceAlpha = 0.0;
+% 
+%         Nd = conv(Nd, ones(1, 1), 'same') / 1;
+%         Hd = line(Xd, Nd);
+%         set(Hd, 'color', 'g', 'linewidth', 1.25)
         
         title('Energy spectrum with smeared peak, binned (Simulation Data)');
         xlabel('Energy, keV');

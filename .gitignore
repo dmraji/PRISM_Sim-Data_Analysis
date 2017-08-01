@@ -1,7 +1,8 @@
-# output files
-output_662keV_1Det_isotropic_phi0_theta90_abgd.txt
-
 # ASV files
 *.asv
 
 # old files
+/old output files/*
+
+# outputs in working dir
+output_*
