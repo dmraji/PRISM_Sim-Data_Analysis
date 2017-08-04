@@ -5,4 +5,4 @@
 /old output files/*
 
 # outputs in working dir
-output_*
+#output_*
