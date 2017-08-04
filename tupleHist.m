@@ -367,11 +367,11 @@ function tupleHist()
         n = 1;
         
         % Assuming a measurement of 10 keV-FWHM for electronic noise
-        elecNoiseFWHM = 10;
+        elecNoiseFWHM = 9;
         elecNoiseSTDDEV = elecNoiseFWHM / 2.355;
         
         % Statistical noise for peak
-        qCarrGenN = peakEn / 0.005;
+        qCarrGenN = peakEn / 0.00464;
         fano = 0.1;
         statResLim = 2.355 * sqrt(fano / qCarrGenN);
         statFWHM = statResLim * peakEn;
@@ -522,7 +522,7 @@ function tupleHist()
                 y = y + 1;
             else
                 
-                qCarrGenN = smEnTC(x) / 0.005;
+                qCarrGenN = smEnTC(x) / 0.00464;
                 fano = 0.1;
                 statResLim = 2.355 * sqrt(fano / qCarrGenN);
                 statFWHM = statResLim * smEnTC(x);
@@ -589,6 +589,7 @@ function tupleHist()
                     enCL = enCL * enMod2;
                 end
                 
+                % Creating a low-noise tail for the photopeak
                 if noTrDOI(clct) <= 2
                     if enCL > (peakEn * 0.9516) - 50
                         enCL = enCL * 0.98;
@@ -606,14 +607,14 @@ function tupleHist()
                     if enCL > (peakEn * 0.9516) - 20
                         if rand > 0.90
                             disterLowEn = randn / 6;
-                            enCL = (enCL * (60 / smEnTC(clct))) * (disterLowEn + 1);
+                            enCL = (enCL * (55 / smEnTC(clct))) * (disterLowEn + 1);
                         end
                     end
                     
                     if enCL > (backScatPeakEn * 0.9516) - 80 && smEnTC(clct) < (backScatPeakEn * 0.9516) + 20
                         if rand > 0.60
                             disterLowEn = randn / 6;
-                            enCL = (enCL * (60 / smEnTC(clct))) * (disterLowEn + 1);
+                            enCL = (enCL * (55 / smEnTC(clct))) * (disterLowEn + 1);
                         end
                     end
                     
@@ -626,7 +627,7 @@ function tupleHist()
                             end
                             disterHiTail = disterHiTail + 1;
                             enCL = (enCL * disterHiTail) - 44;
-                        elseif rand > 0.9925
+                        elseif rand > 0.555
                             enCL = enCL / 100;
                         end
                     end
@@ -653,14 +654,14 @@ function tupleHist()
                     if smEnTC(clct) > (peakEn * 0.9516) - 20
                         if rand > 0.95
                             disterLowEn = randn / 6;
-                            enCL = (enCL * (60 / smEnTC(clct))) * (disterLowEn + 1);
+                            enCL = (enCL * (55 / smEnTC(clct))) * (disterLowEn + 1);
                         end
                     end
                     
                     if smEnTC(clct) > backScatPeakEn - 80 && smEnTC(clct) < backScatPeakEn + 20
                         if rand > 0.75
                             disterLowEn = randn / 6;
-                            enCL = (enCL * (60 / smEnTC(clct))) * (disterLowEn + 1);
+                            enCL = (enCL * (55 / smEnTC(clct))) * (disterLowEn + 1);
                         end
                     end
                     
@@ -673,7 +674,7 @@ function tupleHist()
                             end
                             disterHiTail = disterHiTail + 1;
                             enCL = (enCL * disterHiTail) - 44;
-                        elseif rand > 0.985
+                        elseif rand > 0.545
                             enCL = enCL / 100;
                         end
                     end
@@ -682,7 +683,7 @@ function tupleHist()
                 
                 % Filtering out excess counts in compton continuum and ...
                 %   low-energy peak
-                if enCL < 65
+                if enCL < 60
                     if rand < 0.25
                         enCL = enCL / 100;
                     end
@@ -690,6 +691,11 @@ function tupleHist()
                 if (enCL < 475.8) && (enCL > (240 * 0.9516))
                     enLivMod = (enCL - (220 * 0.9516)) / 1000;
                     if rand < enLivMod
+                        enCL = enCL / 100;
+                    end
+                end
+                if enCL < (240 * 0.9516)
+                    if rand < 0.08
                         enCL = enCL / 100;
                     end
                 end
@@ -707,7 +713,7 @@ function tupleHist()
         end
         
         % Uniformly adjusting for charge loss shift
-        smEnTC = smEnTC * 1.0509;
+        smEnTC = smEnTC * 1.0518;
         
         % Adding the measured background into the spectrum
         function [smEnTC] = background(smEnTC)
@@ -768,22 +774,34 @@ function tupleHist()
             end
         end
         
+        % To ensure proper indexing in comparison to experimental data ...
+        %   (for delta and comparison charts)
+        diffIndHelp = 670;
+        while diffIndHelp <= 1013
+            smEnTC(end+1) = diffIndHelp;
+            diffIndHelp = diffIndHelp + 1;
+        end
+        
         % Uncomment this line and comment lines 664 thru 670 for a bar hist
-        histogram(smEnTC, 1024)
+%         histogram(smEnTC, 1024)
         
-%         [Nd, Xd] = hist(smEnTC, 1024);
-%         Hd = bar(Xd, Nd, 1);
-%         Hd.FaceAlpha = 0.0;
-% 
-%         Nd = conv(Nd, ones(1, 1), 'same') / 1;
-%         Hd = line(Xd, Nd);
-%         set(Hd, 'color', 'g', 'linewidth', 1.25)
+        % 4 keV per bin
+        [Nd, Xd] = hist(smEnTC, 256);
+        Hd = bar(Xd, Nd, 1);
+        Hd.FaceAlpha = 0.0;
+        Hd.EdgeAlpha = 0.0;
+
+        Nd = conv(Nd, ones(1, 1), 'same') / 1;
+        Hd = line(Xd, Nd);
+        set(Hd, 'color', [0, 1, 0], 'linewidth', 0.8)
         
-        title('Energy spectrum with smeared peak, binned (Simulation Data)');
-        xlabel('Energy, keV');
-        xlim([0 1024]);
-        ylabel('Counts');
-        grid on;
+%         title('Energy spectrum with smeared peak, binned (Simulation Data)');
+%         xlabel('Energy, keV');
+%         xlim([0 1024]);
+%         ylabel('Counts');
+%         grid on;
+        
+        hold on;
         
         % Uncomment these two lines if you wish to use the profile viewer
 %         fprintf('Press any key to continue.\n');
@@ -791,5 +809,95 @@ function tupleHist()
     end
 
 %     profile viewer
+
+    % For simulation comparison against measured data
+    spectExperimentalHist(Hd, Nd, Xd);
+
+    function spectExperimentalHist(Hd, Nd, Xd)
+
+        % NOTE: Calibration -> 0 keV at ch0, 662 keV at ch675 (for Co-57, 122
+        % keV @ ch125
+
+        % Grabbing data from kspect output file, transforming into matrix
+        % pr = 'Enter file name.';
+        % fn = input(pr, 's');
+        fn = 'July10_40Vg_DG80_Cs137_phi0_theta90.txt';
+        fID = fopen(fn, 'r');
+        data = fscanf(fID, '%f');
+        fclose(fID);
+
+        chs = 0:1:4096;
+
+        histSpect = [];
+
+        i = 1;
+        k = 1;
+        while i <= length(data)
+            if nonzeros(data(i))
+                j = 1;
+                while j <= data(i)
+                    histSpect(k) = chs(i);
+                    k = k + 1;
+                    j = j + 1;
+                end
+            end
+            i = i + 1;
+        end
+
+        histSpect = (662 * histSpect) / 675;
+
+        histSpect = histSpect(histSpect <= 1024);
+
+    %     histogram(histSpect, 1024)
+
+        [Nd1, Xd1] = hist(histSpect, 256);
+
+        binFixCtr = 1;
+        while binFixCtr < length(Nd1)
+            try
+                if Nd1(binFixCtr) == 0 && Nd1(binFixCtr-1) > 5 && Nd1(binFixCtr+1) > 5
+                    Nd1(binFixCtr) = (Nd1(binFixCtr-1) + Nd1(binFixCtr+1)) / 2;
+                end
+                
+                if (Nd1(binFixCtr) + 10) < Nd1(binFixCtr-1) && (Nd1(binFixCtr) + 10) < Nd1(binFixCtr+1)
+                    Nd1(binFixCtr) = (Nd1(binFixCtr-1) + Nd1(binFixCtr+1)) / 2;
+                end
+            end
+
+            binFixCtr = binFixCtr + 1;
+        end
+
+        Hd1 = bar(Xd1, Nd1, 1);
+        Hd1.FaceAlpha = 0.0;
+        Hd1.EdgeAlpha = 0.0;
+
+        Nd1 = conv(Nd1, ones(1, 1), 'same') / 1;
+        Hd1 = line(Xd1, Nd1);
+        set(Hd1, 'color', 'r', 'linewidth', 0.8);
+
+        title('Counts, Binned (4keV per bin)', 'FontSize', 16);
+        xlabel('Energy, keV', 'FontSize', 16);
+        xlim([0 1024]);
+        ylabel('Counts', 'FontSize', 16);
+        grid on;
+        legend([Hd, Hd1], 'Simulation', 'Experimental')
+        
+        hold off;
+        
+        fprintf('Press any key to continue.\n');
+        pause
+        
+        HdD = line(Xd1, Nd-Nd1);
+        set(HdD, 'color', 'b', 'linewidth', 0.8);
+        
+        title('Counts Delta, Simulation minus Experimental (4keV per bin)', 'FontSize', 16);
+        xlabel('Energy, keV', 'FontSize', 16);
+        xlim([0 1024]);
+        ylabel('Counts', 'FontSize', 16);
+        grid on;
+        legend off;
+        hold off;
+
+    end
 
 end
